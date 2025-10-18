@@ -1,0 +1,12 @@
+# Example configuration file for autoversion
+# Copy this file to .autoversion.yaml and customize as needed
+
+# The name of the main branch (default: "main")
+mainBranch: main
+
+# Optional: Prefix to strip from git tags
+# Examples:
+#   tagPrefix: "v"              # Converts v2.0.0 to 2.0.0
+#   tagPrefix: "PRODUCT/"       # Converts PRODUCT/2.0.0 to 2.0.0
+# Default: "" (empty string, no prefix stripping)
+# tagPrefix: "v"

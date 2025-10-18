@@ -1,0 +1,46 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+autoversion
+autoversion-*
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Config file (keep examples only)
+.autoversion.yaml
+.autoversion.json
+
+# Build artifacts
+dist/
+*.tar.gz
+*.zip
+checksums.txt
+
+.claude/
+CLAUDE.md
+TASKS.md
