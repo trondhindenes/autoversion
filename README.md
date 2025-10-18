@@ -17,6 +17,10 @@ A Go-based CLI tool that automatically generates semantic versions based on the 
 - JSON schema generation for configuration validation
 - Zero configuration required - works with sensible defaults
 
+## Requirements
+
+- **Full git clone**: autoversion requires a full git history and will not work with shallow clones (created with `git clone --depth N`). If you have a shallow clone, convert it to a full clone with `git fetch --unshallow`.
+
 ## Installation
 
 ### Docker (Recommended)
@@ -318,8 +322,15 @@ $ autoversion
 
 ### Using Docker in CI/CD:
 
+**Important**: Many CI systems use shallow clones by default for performance. You must configure your CI to use a full clone for autoversion to work correctly.
+
 **GitHub Actions:**
 ```yaml
+- name: Checkout code
+  uses: actions/checkout@v4
+  with:
+    fetch-depth: 0  # Required: fetch full history for autoversion
+
 - name: Get version
   id: version
   run: |
@@ -331,6 +342,8 @@ $ autoversion
 ```yaml
 get-version:
   image: ghcr.io/trondhindenes/autoversion:latest
+  variables:
+    GIT_DEPTH: 0  # Required: fetch full history for autoversion
   script:
     - autoversion > version.txt
   artifacts:
