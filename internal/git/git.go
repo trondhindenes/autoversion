@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -30,6 +31,51 @@ func OpenRepo(path string) (*Repo, error) {
 	}
 
 	return &Repo{repo: repo}, nil
+}
+
+// IsShallow checks if the repository is a shallow clone
+func (g *Repo) IsShallow() (bool, error) {
+	// Get the repository's worktree to access the git directory
+	worktree, err := g.repo.Worktree()
+	if err != nil {
+		return false, fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Construct path to .git/shallow file
+	gitDir := filepath.Join(worktree.Filesystem.Root(), ".git")
+
+	// Check if .git is a directory or a file (for worktrees)
+	info, err := os.Stat(gitDir)
+	if err != nil {
+		return false, fmt.Errorf("failed to stat .git: %w", err)
+	}
+
+	var shallowPath string
+	if info.IsDir() {
+		// Normal repository
+		shallowPath = filepath.Join(gitDir, "shallow")
+	} else {
+		// Worktree - need to read .git file to find actual git dir
+		// For simplicity, we'll use the storer to check for shallow
+		// go-git stores this information in the storer
+		// We can check if there are any shallow commits
+		shallows, err := g.repo.Storer.Shallow()
+		if err != nil {
+			return false, fmt.Errorf("failed to check shallow status: %w", err)
+		}
+		return len(shallows) > 0, nil
+	}
+
+	// Check if shallow file exists
+	_, err = os.Stat(shallowPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check shallow file: %w", err)
+	}
+
+	return true, nil
 }
 
 // GetCurrentBranch returns the name of the current branch

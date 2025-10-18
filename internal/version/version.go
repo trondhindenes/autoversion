@@ -50,6 +50,17 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 		return "", fmt.Errorf("failed to open git repository: %w", err)
 	}
 
+	// Check if this is a shallow clone
+	log("Checking if repository is a shallow clone...")
+	isShallow, err := repo.IsShallow()
+	if err != nil {
+		return "", fmt.Errorf("failed to check if repository is shallow: %w", err)
+	}
+	if isShallow {
+		return "", fmt.Errorf("autoversion does not work with shallow clones. Please use 'git fetch --unshallow' to convert to a full clone, or clone without --depth")
+	}
+	log("Repository is not a shallow clone")
+
 	// Check for tags first - tags take precedence over everything
 	log("Checking for git tags on current commit...")
 	tag, err := repo.GetTagOnCurrentCommit()
