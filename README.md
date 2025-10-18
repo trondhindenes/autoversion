@@ -19,6 +19,25 @@ A Go-based CLI tool that automatically generates semantic versions based on the 
 
 ## Installation
 
+### Docker (Recommended)
+
+The easiest way to use autoversion is via Docker:
+
+```bash
+# Run in current directory
+docker run --rm -v "$(pwd):/repo" ghcr.io/trondhindenes/autoversion:latest
+
+# With custom config
+docker run --rm -v "$(pwd):/repo" ghcr.io/trondhindenes/autoversion:latest --config .autoversion.yaml
+
+# Generate schema
+docker run --rm ghcr.io/trondhindenes/autoversion:latest schema
+```
+
+**Available tags:**
+- `latest` - Latest stable release
+- `v1`, `v1.0`, `v1.0.13` - Specific versions with semver precision
+
 ### Download Pre-built Binaries
 
 Download the latest release for your platform from the [releases page](https://github.com/trondhindenes/autoversion/releases).
@@ -286,6 +305,38 @@ tagPrefix: "PRODUCT/"
 $ git tag -a PRODUCT/3.1.0 -m "Product Release 3.1.0"
 $ autoversion
 3.1.0
+```
+
+### Using Docker in CI/CD:
+
+**GitHub Actions:**
+```yaml
+- name: Get version
+  id: version
+  run: |
+    VERSION=$(docker run --rm -v "${{ github.workspace }}:/repo" ghcr.io/trondhindenes/autoversion:latest)
+    echo "version=${VERSION}" >> $GITHUB_OUTPUT
+```
+
+**GitLab CI:**
+```yaml
+get-version:
+  image: ghcr.io/trondhindenes/autoversion:latest
+  script:
+    - autoversion > version.txt
+  artifacts:
+    paths:
+      - version.txt
+```
+
+**Generic CI with Docker:**
+```bash
+# Capture version
+VERSION=$(docker run --rm -v "$(pwd):/repo" ghcr.io/trondhindenes/autoversion:latest 2>/dev/null)
+echo "Version: $VERSION"
+
+# Use in build
+docker build -t myapp:${VERSION} .
 ```
 
 ## Development
