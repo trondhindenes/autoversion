@@ -92,6 +92,28 @@ func (g *Repo) GetCurrentBranch() (string, error) {
 	return head.Name().Short(), nil
 }
 
+// IsMainBranch checks if the given branch name matches any of the main branches
+func IsMainBranch(currentBranch string, mainBranches []string) bool {
+	for _, mainBranch := range mainBranches {
+		if currentBranch == mainBranch {
+			return true
+		}
+	}
+	return false
+}
+
+// GetMainBranch returns the first main branch that exists in the repository
+func (g *Repo) GetMainBranch(mainBranches []string) (string, error) {
+	for _, branchName := range mainBranches {
+		branchRefName := plumbing.NewBranchReferenceName(branchName)
+		_, err := g.repo.Reference(branchRefName, true)
+		if err == nil {
+			return branchName, nil
+		}
+	}
+	return "", fmt.Errorf("none of the configured main branches exist: %v", mainBranches)
+}
+
 // GetCommitCount returns the number of commits on the current branch
 func (g *Repo) GetCommitCount() (int, error) {
 	head, err := g.repo.Head()

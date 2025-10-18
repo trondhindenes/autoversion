@@ -9,9 +9,11 @@ A Go-based CLI tool that automatically generates semantic versions based on the 
 - Git tag support: tags on commits take precedence over calculated versions
 - Configurable tag prefix stripping (e.g., `v2.0.0` → `2.0.0` or `PRODUCT/2.0.0` → `2.0.0`)
 - Configurable version prefix for output (e.g., add `v` to output `v1.0.0`)
-- Main branch versions: `1.0.0`, `1.0.1`, `1.0.2`, etc.
+- **Automatic main branch detection**: Works with both `main` and `master` branches by default
+- **Flexible main branch behavior**:
+  - `release` mode (default): Main branch creates release versions like `1.0.0`, `1.0.1`, `1.0.2`
+  - `pre` mode: Main branch creates prerelease versions like `1.0.0-pre.0`, `1.0.0-pre.1` (only tagged commits create releases)
 - Feature branch prerelease versions: `1.0.2-feature.0`, `1.0.2-feature.1`, etc.
-- Configurable main branch name (defaults to `main`)
 - CI/CD environment support with branch detection
 - Supports both YAML and JSON configuration files
 - JSON schema generation for configuration validation
@@ -102,17 +104,19 @@ Create an optional configuration file named `.autoversion.yaml` or `.autoversion
 
 **YAML Example:**
 ```yaml
-mainBranch: main              # Default: "main"
-tagPrefix: "v"                # Default: "" (no stripping) - strips "v" from tags
-versionPrefix: ""             # Default: "" - set to "v" to output v1.0.0
-initialVersion: "1.0.0"       # Default: "1.0.0" - version to use when no tags exist
-useCIBranch: false           # Default: false - enable for CI/CD environments
+mainBranches: ["main", "master"]  # Default: ["main", "master"]
+mainBranchBehavior: "release"     # Default: "release" - or "pre" for prerelease versions
+tagPrefix: "v"                    # Default: "" (no stripping) - strips "v" from tags
+versionPrefix: ""                 # Default: "" - set to "v" to output v1.0.0
+initialVersion: "1.0.0"           # Default: "1.0.0" - version to use when no tags exist
+useCIBranch: false               # Default: false - enable for CI/CD environments
 ```
 
 **JSON Example:**
 ```json
 {
-  "mainBranch": "main",
+  "mainBranches": ["main", "master"],
+  "mainBranchBehavior": "pre",
   "tagPrefix": "PRODUCT/",
   "versionPrefix": ""
 }
@@ -196,7 +200,9 @@ All configuration options are optional. If not specified, the defaults shown bel
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `mainBranch` | string | `"main"` | The name of the main/primary branch |
+| `mainBranches` | array | `["main", "master"]` | List of branch names to treat as main branches. The first matching branch found in the repository is used |
+| `mainBranchBehavior` | string | `"release"` | Behavior for non-tagged commits on main branch: `"release"` creates release versions (`1.0.0`, `1.0.1`) or `"pre"` creates prerelease versions (`1.0.0-pre.0`, `1.0.0-pre.1`). Tagged commits always create release versions |
+| `mainBranch` | string | (deprecated) | Deprecated: Use `mainBranches` instead. Still supported for backward compatibility |
 | `tagPrefix` | string | `""` (empty) | Prefix to strip from git tags (e.g., `"v"` strips `v2.0.0` → `2.0.0`, `"PRODUCT/"` strips `PRODUCT/2.0.0` → `2.0.0`) |
 | `versionPrefix` | string | `""` (empty) | Prefix to add to the output version (e.g., `"v"` outputs `v1.0.0` instead of `1.0.0`) |
 | `initialVersion` | string | `"1.0.0"` | The initial version to use when no tags exist in the repository (e.g., `"0.0.1"` or `"2.0.0"`). Must be valid semver |
@@ -214,9 +220,17 @@ All configuration options are optional. If not specified, the defaults shown bel
 **Common configuration (strip 'v' from tags, keep pure semver output):**
 ```yaml
 # .autoversion.yaml
-mainBranch: main
 tagPrefix: "v"  # Strips "v" prefix from tags (v2.0.0 → 2.0.0)
+# mainBranches not set - will use default ["main", "master"]
 # versionPrefix not set - output will be pure semver (1.0.0)
+```
+
+**Prerelease mode (only tagged commits create releases):**
+```yaml
+# .autoversion.yaml
+mainBranchBehavior: "pre"
+# Non-tagged commits on main will be: 1.0.0-pre.0, 1.0.0-pre.1, etc.
+# Tagged commits will be: 1.0.0, 2.0.0, etc.
 ```
 
 **Output version with 'v' prefix:**
@@ -238,10 +252,16 @@ tagPrefix: "PRODUCT/"  # Strips PRODUCT/ from tags
 initialVersion: "0.0.1"  # First commit outputs 0.0.1 instead of 1.0.0
 ```
 
+**Custom main branch names:**
+```yaml
+# .autoversion.yaml
+mainBranches: ["trunk", "mainline"]
+# Only these branches will be treated as main branches
+```
+
 **CI/CD environment (GitHub Actions, GitLab CI, etc.):**
 ```yaml
 # .autoversion.yaml
-mainBranch: main
 useCIBranch: true  # Detect actual branch from CI environment variables
 ```
 
@@ -258,7 +278,8 @@ ciProviders:
 ### Default Behavior Summary
 
 When you run `autoversion` without any configuration file:
-- Main branch is assumed to be `main`
+- Main branches are `main` or `master` (whichever exists, `main` preferred)
+- Main branch behavior is `release` mode (creates release versions)
 - Git tags are used as-is (no prefix stripping)
 - Output is pure semver format (`1.0.0`, not `v1.0.0`)
 - Initial version (when no tags exist) is `1.0.0`
@@ -307,10 +328,33 @@ $ autoversion
 v2.0.0
 ```
 
+### With prerelease mode on main branch:
+```yaml
+# .autoversion.yaml
+mainBranchBehavior: "pre"
+```
+
+```bash
+# Non-tagged commits create prereleases
+$ git checkout main
+$ # make some commits
+$ autoversion
+1.0.0-pre.2
+
+# Tagged commits create releases
+$ git tag -a "1.0.0" -m "Release 1.0.0"
+$ autoversion
+1.0.0
+
+# Commits after tags continue as prereleases
+$ # make another commit
+$ autoversion
+1.0.1-pre.0
+```
+
 ### With tag prefix (e.g., PRODUCT/):
 ```yaml
 # .autoversion.yaml
-mainBranch: main
 tagPrefix: "PRODUCT/"
 ```
 

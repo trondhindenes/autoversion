@@ -26,6 +26,8 @@ func TestIntegration(t *testing.T) {
 	t.Run("CIBranchDetection", testCIBranchDetection)
 	t.Run("MultipleBranches", testMultipleBranches)
 	t.Run("CustomInitialVersion", testCustomInitialVersion)
+	t.Run("MasterBranchSupport", testMasterBranchSupport)
+	t.Run("MainBranchBehaviorPre", testMainBranchBehaviorPre)
 }
 
 func testMainBranchVersioning(t *testing.T) {
@@ -538,6 +540,145 @@ func testCustomInitialVersion(t *testing.T) {
 	// The tag takes precedence over initialVersion
 	if !strings.HasPrefix(version, "3.0.") || !strings.Contains(version, "-test.") {
 		t.Errorf("Expected version like 3.0.X-test.Y (tag precedence), got %s", version)
+	}
+}
+
+func testMasterBranchSupport(t *testing.T) {
+	repo := setupTestRepo(t, "master")
+	defer cleanup(repo)
+
+	// Change to repo directory
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	if err := os.Chdir(repo); err != nil {
+		t.Fatalf("Failed to change to repo directory: %v", err)
+	}
+	defer os.Chdir(oldDir)
+
+	// Test with default config (should detect master branch automatically)
+	cfg := &config.Config{}
+	version, err := CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.0.0" {
+		t.Errorf("Expected 1.0.0 on master branch, got %s", version)
+	}
+
+	// Add more commits
+	makeCommit(t, repo, "second commit")
+	version, err = CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.0.1" {
+		t.Errorf("Expected 1.0.1, got %s", version)
+	}
+
+	// Test with explicit mainBranches config
+	cfg2 := &config.Config{
+		MainBranches: []string{"main", "master"},
+	}
+	version, err = CalculateWithConfig(cfg2)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.0.1" {
+		t.Errorf("Expected 1.0.1 with explicit config, got %s", version)
+	}
+}
+
+func testMainBranchBehaviorPre(t *testing.T) {
+	repo := setupTestRepo(t, "main")
+	defer cleanup(repo)
+
+	// Change to repo directory
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	if err := os.Chdir(repo); err != nil {
+		t.Fatalf("Failed to change to repo directory: %v", err)
+	}
+	defer os.Chdir(oldDir)
+
+	// Test with mainBranchBehavior: pre
+	preBehavior := "pre"
+	cfg := &config.Config{
+		MainBranchBehavior: &preBehavior,
+	}
+
+	// First commit should be 1.0.0-pre.0
+	version, err := CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.0.0-pre.0" {
+		t.Errorf("Expected 1.0.0-pre.0, got %s", version)
+	}
+
+	// Add more commits
+	makeCommit(t, repo, "second commit")
+	version, err = CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.0.0-pre.1" {
+		t.Errorf("Expected 1.0.0-pre.1, got %s", version)
+	}
+
+	makeCommit(t, repo, "third commit")
+	version, err = CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.0.0-pre.2" {
+		t.Errorf("Expected 1.0.0-pre.2, got %s", version)
+	}
+
+	// Tag a commit - tags should create release versions even in pre mode
+	createTag(t, repo, "1.0.0")
+	version, err = CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.0.0" {
+		t.Errorf("Expected 1.0.0 (tagged commit), got %s", version)
+	}
+
+	// Commit after tag should be prerelease
+	makeCommit(t, repo, "fourth commit")
+	version, err = CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.0.1-pre.0" {
+		t.Errorf("Expected 1.0.1-pre.0 (commit after tag), got %s", version)
+	}
+
+	// Another commit
+	makeCommit(t, repo, "fifth commit")
+	version, err = CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.0.2-pre.1" {
+		t.Errorf("Expected 1.0.2-pre.1, got %s", version)
+	}
+
+	// Test with release behavior (default)
+	releaseBehavior := "release"
+	cfg2 := &config.Config{
+		MainBranchBehavior: &releaseBehavior,
+	}
+	version, err = CalculateWithConfig(cfg2)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.0.2" {
+		t.Errorf("Expected 1.0.2 in release mode, got %s", version)
 	}
 }
 

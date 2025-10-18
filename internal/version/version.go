@@ -101,12 +101,38 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 
 	// No tag found, calculate version based on branch and commit count
 	log("Calculating version based on commit count...")
-	mainBranch := cfg.MainBranch
-	if mainBranch == "" {
-		mainBranch = "main"
-		log("Using default main branch: %s", mainBranch)
+
+	// Determine main branches (with backward compatibility)
+	mainBranches := cfg.MainBranches
+	if len(mainBranches) == 0 {
+		if cfg.MainBranch != "" {
+			// Backward compatibility with old config
+			mainBranches = []string{cfg.MainBranch}
+		} else {
+			mainBranches = []string{"main", "master"}
+		}
+	}
+	log("Configured main branches: %v", mainBranches)
+
+	// Find which main branch exists in the repo
+	mainBranch, err := repo.GetMainBranch(mainBranches)
+	if err != nil {
+		return "", fmt.Errorf("failed to find main branch: %w", err)
+	}
+	log("Using main branch: %s", mainBranch)
+
+	// Get main branch behavior
+	mainBranchBehavior := "release"
+	if cfg.MainBranchBehavior != nil && *cfg.MainBranchBehavior != "" {
+		mainBranchBehavior = *cfg.MainBranchBehavior
+		log("Using configured main branch behavior: %s", mainBranchBehavior)
 	} else {
-		log("Using configured main branch: %s", mainBranch)
+		log("Using default main branch behavior: %s", mainBranchBehavior)
+	}
+
+	// Validate main branch behavior
+	if mainBranchBehavior != "release" && mainBranchBehavior != "pre" {
+		return "", fmt.Errorf("invalid mainBranchBehavior '%s': must be 'release' or 'pre'", mainBranchBehavior)
 	}
 
 	// Try to detect branch from CI environment
@@ -195,26 +221,60 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 
 	version := baseVersion
 
-	if currentBranch == mainBranch {
-		// On main branch: increment patch for each commit since the base version
+	isOnMainBranch := git.IsMainBranch(currentBranch, mainBranches)
+
+	if isOnMainBranch {
+		// On main branch
 		log("On main branch, calculating version...")
 
-		if useTagAsBase {
-			// Increment patch version based on commits since the tag
-			version.Patch += commitsSinceTag
-			log("Incremented patch version by %d commits since tag: %s", commitsSinceTag, version.String())
+		if mainBranchBehavior == "pre" {
+			// In "pre" mode, non-tagged commits create prerelease versions
+			log("Main branch behavior is 'pre': generating prerelease version")
+
+			if useTagAsBase {
+				// We have a tag in history
+				// Determine the next version and create prerelease
+				version.Patch = baseVersion.Patch + commitsSinceTag
+				if commitsSinceTag > 0 {
+					// There are commits since the tag, create prerelease
+					version.Prerelease = "pre"
+					version.Build = commitsSinceTag - 1
+					log("Created prerelease version %d commits since tag: %s", commitsSinceTag, version.String())
+				} else {
+					// We're exactly on the tag (should not reach here as tag check is earlier)
+					log("On tag exactly, using tag version: %s", version.String())
+				}
+			} else {
+				// No tags in history
+				commitCount, err := repo.GetCommitCount()
+				if err != nil {
+					return "", fmt.Errorf("failed to get commit count: %w", err)
+				}
+				// First commit gets initial version as prerelease: 1.0.0-pre.0
+				// Subsequent commits increment: 1.0.0-pre.1, 1.0.0-pre.2, etc.
+				version.Prerelease = "pre"
+				version.Build = commitCount - 1
+				log("Calculated prerelease version from commit count: %s", version.String())
+			}
 		} else {
-			// No valid tags in history, use commit count from start
-			commitCount, err := repo.GetCommitCount()
-			if err != nil {
-				return "", fmt.Errorf("failed to get commit count: %w", err)
+			// In "release" mode (default), create release versions
+			if useTagAsBase {
+				// Increment patch version based on commits since the tag
+				version.Patch += commitsSinceTag
+				log("Incremented patch version by %d commits since tag: %s", commitsSinceTag, version.String())
+			} else {
+				// No valid tags in history, use commit count from start
+				commitCount, err := repo.GetCommitCount()
+				if err != nil {
+					return "", fmt.Errorf("failed to get commit count: %w", err)
+				}
+				// Start from the initial version and increment by (commitCount - 1)
+				// This way, first commit gets the initial version (e.g., 0.0.1), second gets 0.0.2, etc.
+				if commitCount > 1 {
+					version.Patch += (commitCount - 1)
+				}
+				log("Calculated version from commit count: %s", version.String())
 			}
-			// Start from the initial version and increment by (commitCount - 1)
-			// This way, first commit gets the initial version (e.g., 0.0.1), second gets 0.0.2, etc.
-			if commitCount > 1 {
-				version.Patch += (commitCount - 1)
-			}
-			log("Calculated version from commit count: %s", version.String())
 		}
 	} else {
 		// On feature branch: version is BASE.X-branchname.Y

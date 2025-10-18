@@ -41,7 +41,8 @@ func initConfig() {
 		viper.SetConfigType("yaml")
 	}
 
-	viper.SetDefault("mainBranch", "main")
+	viper.SetDefault("mainBranches", []string{"main", "master"})
+	viper.SetDefault("mainBranchBehavior", "release")
 	viper.SetDefault("tagPrefix", "")
 	viper.SetDefault("versionPrefix", "")
 	viper.SetDefault("initialVersion", "1.0.0")
@@ -54,11 +55,25 @@ func initConfig() {
 
 func run(cmd *cobra.Command, args []string) {
 	// Build config from viper settings
-	cfg := &config.Config{
-		MainBranch: viper.GetString("mainBranch"),
+	cfg := &config.Config{}
+
+	// Handle mainBranches (with backward compatibility for mainBranch)
+	if viper.IsSet("mainBranch") {
+		// Backward compatibility: if old mainBranch is set, use it
+		cfg.MainBranch = viper.GetString("mainBranch")
+		cfg.MainBranches = []string{cfg.MainBranch}
+	} else if viper.IsSet("mainBranches") {
+		cfg.MainBranches = viper.GetStringSlice("mainBranches")
+	} else {
+		cfg.MainBranches = []string{"main", "master"}
 	}
 
 	// Handle optional fields
+	if viper.IsSet("mainBranchBehavior") {
+		behavior := viper.GetString("mainBranchBehavior")
+		cfg.MainBranchBehavior = &behavior
+	}
+
 	if viper.IsSet("tagPrefix") {
 		tagPrefix := viper.GetString("tagPrefix")
 		cfg.TagPrefix = &tagPrefix
