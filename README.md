@@ -210,6 +210,26 @@ $ autoversion
 
 ## Development
 
+### Setup Git Hooks (Recommended)
+
+After cloning the repository, install the Git hooks to automatically format code before commits:
+
+```bash
+./scripts/install-git-hooks.sh
+```
+
+This installs a pre-commit hook that:
+- Automatically runs `gofmt -w -s` on all staged Go files
+- Re-stages the formatted files
+- Shows which files were formatted
+
+The hook ensures all committed code is properly formatted.
+
+**Skip the hook for a specific commit:**
+```bash
+git commit --no-verify
+```
+
 ### Using the Makefile
 
 ```bash
@@ -239,12 +259,11 @@ make help
 
 ```bash
 # Run tests
-go test -v
+go test -v ./...
 
 # Build manually
-go build -o bin/autoversion .
+go build -o bin/autoversion ./cmd/autoversion
+
+# Format code
+gofmt -w -s .
 ```
-
-## License
-
-MIT
