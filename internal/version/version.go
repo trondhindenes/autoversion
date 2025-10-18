@@ -3,6 +3,8 @@ package version
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/trondhindenes/autoversion/internal/ci"
 	"github.com/trondhindenes/autoversion/internal/config"
@@ -110,6 +112,51 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 		currentBranch = ciBranch
 	}
 
+	// Check for most recent tag in history
+	log("Looking for most recent tag in commit history...")
+	mostRecentTag, commitsSinceTag, err := repo.GetMostRecentTag()
+	if err != nil {
+		return "", fmt.Errorf("failed to get most recent tag: %w", err)
+	}
+
+	var baseVersion Version
+	var useTagAsBase bool
+	if mostRecentTag != "" {
+		log("Found most recent tag in history: %s (%d commits ago)", mostRecentTag, commitsSinceTag)
+
+		// Strip prefix and validate
+		strippedTag := git.StripTagPrefix(mostRecentTag, tagPrefix)
+		if tagPrefix != "" && strippedTag != mostRecentTag {
+			log("Stripped tag prefix '%s': %s -> %s", tagPrefix, mostRecentTag, strippedTag)
+		}
+
+		if !IsValidSemver(strippedTag) {
+			log("WARNING: Most recent tag '%s' is not valid semver (after stripping prefix), ignoring", strippedTag)
+			log("Falling back to commit-count-based versioning")
+			baseVersion = Version{Major: 1, Minor: 0, Patch: 0}
+			useTagAsBase = false
+			mostRecentTag = "" // Clear it so we use commit count
+		} else {
+			// Parse the version from the tag
+			parsedVersion, err := parseVersion(strippedTag)
+			if err != nil {
+				log("WARNING: Failed to parse version from tag '%s': %v", strippedTag, err)
+				log("Falling back to commit-count-based versioning")
+				baseVersion = Version{Major: 1, Minor: 0, Patch: 0}
+				useTagAsBase = false
+				mostRecentTag = "" // Clear it so we use commit count
+			} else {
+				log("Using tag '%s' as base version", strippedTag)
+				baseVersion = parsedVersion
+				useTagAsBase = true
+			}
+		}
+	} else {
+		log("No tags found in commit history, using 1.0.0 as base version")
+		baseVersion = Version{Major: 1, Minor: 0, Patch: 0}
+		useTagAsBase = false
+	}
+
 	// Get commit count on main branch
 	mainCommitCount, err := repo.GetMainBranchCommitCount(mainBranch)
 	if err != nil {
@@ -117,30 +164,40 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 	}
 	log("Commit count on %s branch: %d", mainBranch, mainCommitCount)
 
-	version := Version{
-		Major: 1,
-		Minor: 0,
-		Patch: 0,
-	}
+	version := baseVersion
 
 	if currentBranch == mainBranch {
-		// On main branch: version is 1.0.0, 1.0.1, 1.0.2, etc.
+		// On main branch: increment patch for each commit since the base version
 		log("On main branch, calculating version...")
-		commitCount, err := repo.GetCommitCount()
-		if err != nil {
-			return "", fmt.Errorf("failed to get commit count: %w", err)
-		}
 
-		if commitCount > 0 {
-			version.Patch = commitCount - 1
+		if useTagAsBase {
+			// Increment patch version based on commits since the tag
+			version.Patch += commitsSinceTag
+			log("Incremented patch version by %d commits since tag: %s", commitsSinceTag, version.String())
+		} else {
+			// No valid tags in history, use commit count from start
+			commitCount, err := repo.GetCommitCount()
+			if err != nil {
+				return "", fmt.Errorf("failed to get commit count: %w", err)
+			}
+			if commitCount > 0 {
+				version.Patch = commitCount - 1
+			}
+			log("Calculated version from commit count: %s", version.String())
 		}
-		log("Calculated version for main branch: %s", version.String())
 	} else {
-		// On feature branch: version is 1.0.X-branchname.Y
-		// X is the next patch version (mainCommitCount)
+		// On feature branch: version is BASE.X-branchname.Y
+		// X is the next patch version
 		// Y is the number of commits on this branch since branching
 		log("On feature branch '%s', calculating prerelease version...", currentBranch)
-		version.Patch = mainCommitCount
+
+		// Use main branch commit count to determine next patch version
+		if useTagAsBase {
+			// The next version after the tag, considering main branch commits
+			version.Patch = baseVersion.Patch + mainCommitCount
+		} else {
+			version.Patch = mainCommitCount
+		}
 
 		branchCommitCount, err := repo.GetCommitCountSinceBranchPoint(mainBranch)
 		if err != nil {
@@ -171,4 +228,44 @@ func applyVersionPrefix(version string, cfg *config.Config) string {
 		return *cfg.VersionPrefix + version
 	}
 	return version
+}
+
+// parseVersion parses a semver string into a Version struct
+// Only parses MAJOR.MINOR.PATCH, ignores prerelease and build metadata
+func parseVersion(semver string) (Version, error) {
+	var v Version
+
+	// Remove prerelease and build metadata for parsing
+	parts := strings.Split(semver, "-")
+	corePart := parts[0]
+
+	parts = strings.Split(corePart, "+")
+	corePart = parts[0]
+
+	// Parse MAJOR.MINOR.PATCH
+	parts = strings.Split(corePart, ".")
+	if len(parts) != 3 {
+		return v, fmt.Errorf("invalid semver format: %s", semver)
+	}
+
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return v, fmt.Errorf("invalid major version: %s", parts[0])
+	}
+
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return v, fmt.Errorf("invalid minor version: %s", parts[1])
+	}
+
+	patch, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return v, fmt.Errorf("invalid patch version: %s", parts[2])
+	}
+
+	v.Major = major
+	v.Minor = minor
+	v.Patch = patch
+
+	return v, nil
 }

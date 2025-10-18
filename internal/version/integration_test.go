@@ -153,13 +153,26 @@ func testTagSupport(t *testing.T) {
 	// Add another commit (no tag)
 	makeCommit(t, repo, "fourth commit")
 
-	// Should go back to calculated version
+	// Should increment from the most recent tag (2.0.0 -> 2.0.1)
 	version, err = calculateVersionInRepo(repo, "main", "")
 	if err != nil {
 		t.Fatalf("Failed to calculate version: %v", err)
 	}
-	if version != "1.0.3" {
-		t.Errorf("Expected 1.0.3, got %s", version)
+	if version != "2.0.1" {
+		t.Errorf("Expected 2.0.1 (incremented from tag 2.0.0), got %s", version)
+	}
+
+	// Add more commits
+	makeCommit(t, repo, "fifth commit")
+	makeCommit(t, repo, "sixth commit")
+
+	// Should continue incrementing (2.0.3)
+	version, err = calculateVersionInRepo(repo, "main", "")
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "2.0.3" {
+		t.Errorf("Expected 2.0.3 (incremented from tag 2.0.0), got %s", version)
 	}
 }
 

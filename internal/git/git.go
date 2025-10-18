@@ -213,6 +213,61 @@ func (g *Repo) GetTagOnCurrentCommit() (string, error) {
 	return foundTag, nil
 }
 
+// GetMostRecentTag returns the most recent tag in the commit history (walking back from HEAD)
+// Returns the tag name and the number of commits since that tag
+func (g *Repo) GetMostRecentTag() (string, int, error) {
+	head, err := g.repo.Head()
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	// Get all tags
+	tagRefs, err := g.repo.Tags()
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to get tags: %w", err)
+	}
+
+	// Build a map of commit hash to tag name
+	tagMap := make(map[plumbing.Hash]string)
+	err = tagRefs.ForEach(func(ref *plumbing.Reference) error {
+		tagMap[ref.Hash()] = ref.Name().Short()
+
+		// Also check annotated tags
+		tag, err := g.repo.TagObject(ref.Hash())
+		if err == nil {
+			tagMap[tag.Target] = ref.Name().Short()
+		}
+
+		return nil
+	})
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to iterate tags: %w", err)
+	}
+
+	// Walk the commit history from HEAD
+	commitIter, err := g.repo.Log(&git.LogOptions{From: head.Hash()})
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to get commit log: %w", err)
+	}
+
+	commitsSinceTag := 0
+	var foundTag string
+	err = commitIter.ForEach(func(c *object.Commit) error {
+		if tagName, exists := tagMap[c.Hash]; exists {
+			foundTag = tagName
+			return storer.ErrStop
+		}
+		commitsSinceTag++
+		return nil
+	})
+
+	if err != nil && err != storer.ErrStop {
+		return "", 0, fmt.Errorf("failed to iterate commits: %w", err)
+	}
+
+	return foundTag, commitsSinceTag, nil
+}
+
 // StripTagPrefix removes the configured prefix from a tag name
 func StripTagPrefix(tag, prefix string) string {
 	if prefix == "" {
