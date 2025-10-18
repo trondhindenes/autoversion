@@ -101,6 +101,7 @@ Create an optional configuration file named `.autoversion.yaml` or `.autoversion
 mainBranch: main              # Default: "main"
 tagPrefix: "v"                # Default: "" (no stripping) - strips "v" from tags
 versionPrefix: ""             # Default: "" - set to "v" to output v1.0.0
+initialVersion: "1.0.0"       # Default: "1.0.0" - version to use when no tags exist
 useCIBranch: false           # Default: false - enable for CI/CD environments
 ```
 
@@ -194,6 +195,7 @@ All configuration options are optional. If not specified, the defaults shown bel
 | `mainBranch` | string | `"main"` | The name of the main/primary branch |
 | `tagPrefix` | string | `""` (empty) | Prefix to strip from git tags (e.g., `"v"` strips `v2.0.0` → `2.0.0`, `"PRODUCT/"` strips `PRODUCT/2.0.0` → `2.0.0`) |
 | `versionPrefix` | string | `""` (empty) | Prefix to add to the output version (e.g., `"v"` outputs `v1.0.0` instead of `1.0.0`) |
+| `initialVersion` | string | `"1.0.0"` | The initial version to use when no tags exist in the repository (e.g., `"0.0.1"` or `"2.0.0"`). Must be valid semver |
 | `useCIBranch` | boolean | `false` | Enable CI branch detection (useful for PR builds where CI checks out a detached HEAD) |
 | `ciProviders` | object | `{}` (empty) | Custom CI provider configurations for branch detection |
 
@@ -226,6 +228,12 @@ mainBranch: main
 tagPrefix: "PRODUCT/"  # Strips PRODUCT/ from tags
 ```
 
+**Start versioning from 0.0.1:**
+```yaml
+# .autoversion.yaml
+initialVersion: "0.0.1"  # First commit outputs 0.0.1 instead of 1.0.0
+```
+
 **CI/CD environment (GitHub Actions, GitLab CI, etc.):**
 ```yaml
 # .autoversion.yaml
@@ -249,6 +257,7 @@ When you run `autoversion` without any configuration file:
 - Main branch is assumed to be `main`
 - Git tags are used as-is (no prefix stripping)
 - Output is pure semver format (`1.0.0`, not `v1.0.0`)
+- Initial version (when no tags exist) is `1.0.0`
 - Branch detection uses git's current branch (no CI environment detection)
 - First commit on main outputs `1.0.0`
 - Each subsequent commit increments patch version (`1.0.1`, `1.0.2`, etc.)

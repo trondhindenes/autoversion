@@ -25,6 +25,7 @@ func TestIntegration(t *testing.T) {
 	t.Run("BranchSanitization", testBranchSanitization)
 	t.Run("CIBranchDetection", testCIBranchDetection)
 	t.Run("MultipleBranches", testMultipleBranches)
+	t.Run("CustomInitialVersion", testCustomInitialVersion)
 }
 
 func testMainBranchVersioning(t *testing.T) {
@@ -422,6 +423,121 @@ func testMultipleBranches(t *testing.T) {
 	}
 	if version != "1.0.8-branch-a.2" {
 		t.Errorf("Expected 1.0.8-branch-a.2, got %s", version)
+	}
+}
+
+func testCustomInitialVersion(t *testing.T) {
+	repo := setupTestRepo(t, "main")
+	defer cleanup(repo)
+
+	// Change to repo directory
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	if err := os.Chdir(repo); err != nil {
+		t.Fatalf("Failed to change to repo directory: %v", err)
+	}
+	defer os.Chdir(oldDir)
+
+	// Test with 0.0.1 as initial version
+	initialVersion := "0.0.1"
+	cfg := &config.Config{
+		MainBranch:     "main",
+		InitialVersion: &initialVersion,
+	}
+
+	// First commit should be 0.0.1
+	version, err := CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "0.0.1" {
+		t.Errorf("Expected 0.0.1 (custom initial version), got %s", version)
+	}
+
+	// Add more commits
+	makeCommit(t, repo, "second commit")
+	version, err = CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "0.0.2" {
+		t.Errorf("Expected 0.0.2, got %s", version)
+	}
+
+	makeCommit(t, repo, "third commit")
+	version, err = CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "0.0.3" {
+		t.Errorf("Expected 0.0.3, got %s", version)
+	}
+
+	// Test with 2.5.0 as initial version
+	initialVersion2 := "2.5.0"
+	cfg2 := &config.Config{
+		MainBranch:     "main",
+		InitialVersion: &initialVersion2,
+	}
+
+	// Should use 2.5.0 as base and increment (we have 3 commits, so 2.5.2)
+	version, err = CalculateWithConfig(cfg2)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "2.5.2" {
+		t.Errorf("Expected 2.5.2 (custom initial 2.5.0 + 2 commits), got %s", version)
+	}
+
+	// Test with a tag - tag should take precedence over initialVersion
+	createTag(t, repo, "3.0.0")
+	version, err = CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "3.0.0" {
+		t.Errorf("Expected 3.0.0 (tag takes precedence), got %s", version)
+	}
+
+	// Add commit after tag
+	makeCommit(t, repo, "fourth commit")
+	version, err = CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "3.0.1" {
+		t.Errorf("Expected 3.0.1 (incremented from tag), got %s", version)
+	}
+
+	// Test invalid initial version
+	invalidVersion := "not-a-version"
+	cfg3 := &config.Config{
+		MainBranch:     "main",
+		InitialVersion: &invalidVersion,
+	}
+	_, err = CalculateWithConfig(cfg3)
+	if err == nil {
+		t.Error("Expected error for invalid initial version, got nil")
+	}
+
+	// Test feature branch with custom initial version
+	checkoutBranch(t, repo, "feature/test", true)
+	initialVersion3 := "0.1.0"
+	cfg4 := &config.Config{
+		MainBranch:     "main",
+		InitialVersion: &initialVersion3,
+	}
+
+	version, err = CalculateWithConfig(cfg4)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	// With a tag 3.0.0 on main, feature branch should be 3.0.2-test.0 (main has 4 commits)
+	// The tag takes precedence over initialVersion
+	if !strings.HasPrefix(version, "3.0.") || !strings.Contains(version, "-test.") {
+		t.Errorf("Expected version like 3.0.X-test.Y (tag precedence), got %s", version)
 	}
 }
 
