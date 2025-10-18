@@ -1,0 +1,65 @@
+name: Prerelease Mode Example
+
+# This example demonstrates using mainBranchBehavior: "pre"
+# where only tagged commits create release versions
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Create .autoversion.yaml with pre mode
+      - name: Configure autoversion for prerelease mode
+        run: |
+          cat > .autoversion.yaml << EOF
+          mainBranchBehavior: "pre"
+          tagPrefix: "v"
+          EOF
+
+      - name: Calculate version
+        id: version
+        uses: trondhindenes/autoversion@v1
+        with:
+          config: .autoversion.yaml
+
+      - name: Display version info
+        run: |
+          echo "Version: ${{ steps.version.outputs.version }}"
+          echo "Is prerelease: ${{ steps.version.outputs.is-prerelease }}"
+
+      # Build prerelease version
+      - name: Build prerelease
+        if: steps.version.outputs.is-prerelease == 'true'
+        run: |
+          echo "Building prerelease ${{ steps.version.outputs.version }}"
+          # Build commands...
+
+      # If you want to create a release, manually tag the commit
+      # Example: git tag -a "1.0.0" -m "Release 1.0.0"
+      # Then the next run will detect the tag and output "1.0.0"
+
+      - name: Publish prerelease to registry
+        if: steps.version.outputs.is-prerelease == 'true'
+        run: |
+          echo "Publishing ${{ steps.version.outputs.version }} as prerelease"
+          # Example: npm publish --tag next
+          # Example: docker push myimage:${{ steps.version.outputs.version }}
+
+      - name: Publish release to registry
+        if: steps.version.outputs.is-prerelease == 'false'
+        run: |
+          echo "Publishing ${{ steps.version.outputs.version }} as release"
+          # Example: npm publish --tag latest
+          # Example: docker push myimage:latest

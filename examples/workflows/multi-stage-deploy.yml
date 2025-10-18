@@ -1,0 +1,86 @@
+name: Multi-Stage Deployment
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+
+jobs:
+  version-and-build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is-prerelease: ${{ steps.version.outputs.is-prerelease }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate version
+        id: version
+        uses: trondhindenes/autoversion@v1
+
+      - name: Build application
+        run: |
+          echo "Building version ${{ steps.version.outputs.version }}"
+          # Your build commands here
+          # Example: npm run build, go build, etc.
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ steps.version.outputs.version }}
+          path: dist/  # Adjust to your build output directory
+
+  deploy-staging:
+    needs: version-and-build
+    runs-on: ubuntu-latest
+    if: needs.version-and-build.outputs.is-prerelease == 'true'
+    environment:
+      name: staging
+      url: https://staging.example.com
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ needs.version-and-build.outputs.version }}
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying version ${{ needs.version-and-build.outputs.version }} to staging"
+          # Your staging deployment commands
+          # Example: aws s3 sync dist/ s3://staging-bucket/
+
+  deploy-production:
+    needs: version-and-build
+    runs-on: ubuntu-latest
+    if: |
+      github.ref == 'refs/heads/main' &&
+      needs.version-and-build.outputs.is-prerelease == 'false'
+    environment:
+      name: production
+      url: https://example.com
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ needs.version-and-build.outputs.version }}
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying version ${{ needs.version-and-build.outputs.version }} to production"
+          # Your production deployment commands
+          # Example: aws s3 sync dist/ s3://prod-bucket/
+
+      - name: Create release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ needs.version-and-build.outputs.version }}" \
+            -m "Release v${{ needs.version-and-build.outputs.version }}"
+          git push origin "v${{ needs.version-and-build.outputs.version }}"

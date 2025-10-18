@@ -1,0 +1,38 @@
+# GitHub Action Dockerfile
+# This Dockerfile is used by the GitHub Action and builds from source in the action repository
+
+FROM golang:1.25-alpine AS builder
+
+# Install git (needed for go-git and autoversion to work)
+RUN apk add --no-cache git
+
+WORKDIR /build
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the binary
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o autoversion ./cmd/autoversion
+
+# Final stage
+FROM alpine:latest
+
+# Install git (required for autoversion to work with repositories)
+RUN apk add --no-cache git bash
+
+# Copy the binary from builder
+COPY --from=builder /build/autoversion /usr/local/bin/autoversion
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Set working directory
+WORKDIR /github/workspace
+
+# Set entrypoint
+ENTRYPOINT ["/entrypoint.sh"]

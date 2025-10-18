@@ -1,0 +1,38 @@
+name: 'Autoversion'
+description: 'Automatically generate semantic versions based on git repository state'
+author: 'Trond Hindenes'
+
+branding:
+  icon: 'hash'
+  color: 'blue'
+
+inputs:
+  config:
+    description: 'Path to configuration file (default: .autoversion.yaml)'
+    required: false
+    default: ''
+  fail-on-error:
+    description: 'Whether to fail the action if version calculation fails'
+    required: false
+    default: 'true'
+
+outputs:
+  version:
+    description: 'The calculated semantic version (e.g., 1.0.0 or 1.0.0-pre.0)'
+  major:
+    description: 'The major version number (e.g., 1)'
+  minor:
+    description: 'The minor version number (e.g., 0)'
+  patch:
+    description: 'The patch version number (e.g., 0)'
+  prerelease:
+    description: 'The prerelease identifier if present (e.g., pre.0 or feature-branch.1)'
+  is-prerelease:
+    description: 'Whether this is a prerelease version (true/false)'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile.github-action'
+  args:
+    - ${{ inputs.config }}
+    - ${{ inputs.fail-on-error }}

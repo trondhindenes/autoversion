@@ -25,7 +25,22 @@ A Go-based CLI tool that automatically generates semantic versions based on the 
 
 ## Installation
 
-### Docker (Recommended)
+### GitHub Action (Recommended for CI/CD)
+
+The easiest way to use autoversion in GitHub Actions:
+
+```yaml
+- name: Calculate version
+  id: version
+  uses: trondhindenes/autoversion@v1
+
+- name: Use the version
+  run: echo "Version is ${{ steps.version.outputs.version }}"
+```
+
+See [GitHub Action documentation](ACTION.md) for complete usage examples.
+
+### Docker
 
 The easiest way to use autoversion is via Docker:
 
