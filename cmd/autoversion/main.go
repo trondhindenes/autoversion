@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	cfgFile   string
-	rootCmd   = &cobra.Command{
+	cfgFile string
+	rootCmd = &cobra.Command{
 		Use:   "autoversion",
 		Short: "Automatically generate semantic versions based on git repository state",
 		Long: `autoversion is a CLI tool that generates semantic versions based on the state of a git repository.
