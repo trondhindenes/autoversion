@@ -24,6 +24,9 @@ FROM alpine:latest
 # Install git (required for autoversion to work with repositories)
 RUN apk add --no-cache git bash
 
+# Configure git to trust any directory (needed for GitHub Actions mounted volumes)
+RUN git config --global --add safe.directory '*'
+
 # Copy the binary from builder
 COPY --from=builder /build/autoversion /usr/local/bin/autoversion
 

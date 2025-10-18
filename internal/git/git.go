@@ -103,10 +103,19 @@ func IsMainBranch(currentBranch string, mainBranches []string) bool {
 }
 
 // GetMainBranch returns the first main branch that exists in the repository
+// It checks both local and remote branches to handle detached HEAD states in CI
 func (g *Repo) GetMainBranch(mainBranches []string) (string, error) {
 	for _, branchName := range mainBranches {
+		// Try local branch first
 		branchRefName := plumbing.NewBranchReferenceName(branchName)
 		_, err := g.repo.Reference(branchRefName, true)
+		if err == nil {
+			return branchName, nil
+		}
+
+		// Try remote branch (e.g., origin/main, origin/master)
+		remoteBranchRefName := plumbing.NewRemoteReferenceName("origin", branchName)
+		_, err = g.repo.Reference(remoteBranchRefName, true)
 		if err == nil {
 			return branchName, nil
 		}
@@ -139,11 +148,19 @@ func (g *Repo) GetCommitCount() (int, error) {
 }
 
 // GetMainBranchCommitCount returns the commit count on the main branch
+// It checks both local and remote branches to handle detached HEAD states in CI
 func (g *Repo) GetMainBranchCommitCount(mainBranch string) (int, error) {
+	// Try local branch first
 	refName := plumbing.NewBranchReferenceName(mainBranch)
 	ref, err := g.repo.Reference(refName, true)
+
+	// If local branch doesn't exist, try remote branch
 	if err != nil {
-		return 0, fmt.Errorf("failed to get %s branch reference: %w", mainBranch, err)
+		remoteBranchRefName := plumbing.NewRemoteReferenceName("origin", mainBranch)
+		ref, err = g.repo.Reference(remoteBranchRefName, true)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get %s branch reference (tried both local and remote): %w", mainBranch, err)
+		}
 	}
 
 	commitIter, err := g.repo.Log(&git.LogOptions{From: ref.Hash()})
@@ -179,10 +196,17 @@ func (g *Repo) GetCommitCountSinceBranchPoint(mainBranch string) (int, error) {
 		return 0, fmt.Errorf("failed to get HEAD: %w", err)
 	}
 
+	// Try local branch first
 	mainRefName := plumbing.NewBranchReferenceName(mainBranch)
 	mainRef, err := g.repo.Reference(mainRefName, true)
+
+	// If local branch doesn't exist, try remote branch
 	if err != nil {
-		return 0, fmt.Errorf("failed to get %s branch reference: %w", mainBranch, err)
+		remoteBranchRefName := plumbing.NewRemoteReferenceName("origin", mainBranch)
+		mainRef, err = g.repo.Reference(remoteBranchRefName, true)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get %s branch reference (tried both local and remote): %w", mainBranch, err)
+		}
 	}
 
 	// Get commits on current branch

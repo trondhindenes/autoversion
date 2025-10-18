@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Ensure git trusts the mounted workspace directory
+git config --global --add safe.directory '*' 2>/dev/null || true
+
 # Input parameters
 CONFIG_FILE="$1"
 FAIL_ON_ERROR="${2:-true}"

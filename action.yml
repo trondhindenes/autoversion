@@ -15,24 +15,61 @@ inputs:
     description: 'Whether to fail the action if version calculation fails'
     required: false
     default: 'true'
+  version:
+    description: 'Specific version of autoversion to use (default: 1, can be "1", "1.0", "1.0.0", or "latest")'
+    required: false
+    default: '1'
 
 outputs:
   version:
     description: 'The calculated semantic version (e.g., 1.0.0 or 1.0.0-pre.0)'
+    value: ${{ steps.autoversion.outputs.version }}
   major:
     description: 'The major version number (e.g., 1)'
+    value: ${{ steps.autoversion.outputs.major }}
   minor:
     description: 'The minor version number (e.g., 0)'
+    value: ${{ steps.autoversion.outputs.minor }}
   patch:
     description: 'The patch version number (e.g., 0)'
+    value: ${{ steps.autoversion.outputs.patch }}
   prerelease:
     description: 'The prerelease identifier if present (e.g., pre.0 or feature-branch.1)'
+    value: ${{ steps.autoversion.outputs.prerelease }}
   is-prerelease:
     description: 'Whether this is a prerelease version (true/false)'
+    value: ${{ steps.autoversion.outputs.is-prerelease }}
 
 runs:
-  using: 'docker'
-  image: 'Dockerfile.github-action'
-  args:
-    - ${{ inputs.config }}
-    - ${{ inputs.fail-on-error }}
+  using: 'composite'
+  steps:
+    - name: Run autoversion
+      id: autoversion
+      shell: bash
+      run: |
+        # Determine which image version to use
+        IMAGE_TAG="${{ inputs.version }}"
+        if [ -z "$IMAGE_TAG" ] || [ "$IMAGE_TAG" = "latest" ]; then
+          IMAGE_TAG="latest"
+        fi
+
+        # Create a temporary output file
+        TEMP_OUTPUT=$(mktemp)
+
+        # Run autoversion via Docker
+        # Mount the entire workspace including .git directory
+        # Set working directory to /github/workspace to match GitHub Actions convention
+        docker run --rm \
+          -v "${{ github.workspace }}:/github/workspace" \
+          -v "$TEMP_OUTPUT:$TEMP_OUTPUT" \
+          -w /github/workspace \
+          -e GITHUB_OUTPUT="$TEMP_OUTPUT" \
+          ghcr.io/trondhindenes/autoversion:${IMAGE_TAG}-action \
+          "${{ inputs.config }}" \
+          "${{ inputs.fail-on-error }}"
+
+        # Copy outputs from temp file to actual GITHUB_OUTPUT
+        if [ -f "$TEMP_OUTPUT" ]; then
+          cat "$TEMP_OUTPUT" >> "${GITHUB_OUTPUT}"
+          rm -f "$TEMP_OUTPUT"
+        fi

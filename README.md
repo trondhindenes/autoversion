@@ -22,6 +22,7 @@ A Go-based CLI tool that automatically generates semantic versions based on the 
 ## Requirements
 
 - **Full git clone**: autoversion requires a full git history and will not work with shallow clones (created with `git clone --depth N`). If you have a shallow clone, convert it to a full clone with `git fetch --unshallow`.
+- **GitHub Actions note**: autoversion automatically handles detached HEAD states in CI environments by checking both local and remote branch references.
 
 ## Installation
 

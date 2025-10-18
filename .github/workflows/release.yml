@@ -241,3 +241,26 @@ jobs:
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Extract metadata for action image
+        id: meta-action
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}-action,value=${{ needs.release.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}}-action,value=${{ needs.release.outputs.version }}
+            type=semver,pattern={{major}}-action,value=${{ needs.release.outputs.version }}
+            type=raw,value=latest-action
+
+      - name: Build and push GitHub Action image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.github-action
+          push: true
+          tags: ${{ steps.meta-action.outputs.tags }}
+          labels: ${{ steps.meta-action.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -5,6 +5,7 @@ Automatically generate semantic versions in your GitHub Actions workflows based 
 ## Features
 
 - 🚀 Automatic version calculation based on commits and tags
+- ⚡ Fast execution using pre-built Docker images
 - 🏷️ Support for both `main` and `master` branches
 - 🔀 Feature branch prerelease versions
 - 🎯 Multiple output formats (full version, major, minor, patch)
@@ -65,6 +66,22 @@ steps:
       echo "Minor: ${{ steps.version.outputs.minor }}"
       echo "Patch: ${{ steps.version.outputs.patch }}"
       echo "Is prerelease: ${{ steps.version.outputs.is-prerelease }}"
+```
+
+### Pin to Specific Autoversion Version
+
+```yaml
+steps:
+  - name: Checkout code
+    uses: actions/checkout@v4
+    with:
+      fetch-depth: 0
+
+  - name: Calculate version with specific autoversion version
+    id: version
+    uses: trondhindenes/autoversion@v1
+    with:
+      version: '1.0.5'  # Use a specific version of autoversion
 ```
 
 ### Create Git Tag and Release
@@ -156,6 +173,7 @@ steps:
 |-------|-------------|----------|---------|
 | `config` | Path to configuration file | No | `.autoversion.yaml` |
 | `fail-on-error` | Whether to fail the action if version calculation fails | No | `true` |
+| `version` | Specific version of autoversion to use (e.g., `"1"`, `"1.0"`, `"1.0.0"`, or `"latest"`) | No | `"1"` |
 
 ## Outputs
 
@@ -193,7 +211,9 @@ initialVersion: "1.0.0"
 
 See the [main README](README.md) for full configuration documentation.
 
-## Important: Fetch Full History
+## Important Requirements
+
+### Fetch Full History
 
 **You must use `fetch-depth: 0` when checking out your repository**, otherwise autoversion will fail because it needs the full git history to calculate versions correctly:
 
@@ -202,6 +222,10 @@ See the [main README](README.md) for full configuration documentation.
   with:
     fetch-depth: 0  # This is required!
 ```
+
+### Docker Availability
+
+The GitHub Action runs autoversion in a Docker container, so **Docker must be available** in your runner environment. All GitHub-hosted runners (ubuntu-latest, etc.) include Docker by default. If using self-hosted runners, ensure Docker is installed and accessible.
 
 ## How It Works
 
@@ -239,6 +263,47 @@ Check out the [examples directory](examples/workflows/) for complete workflow ex
 ## License
 
 See [LICENSE](LICENSE) file in the main repository.
+
+## Docker Images
+
+The action uses pre-built Docker images for fast execution:
+
+- **Action Image**: `ghcr.io/trondhindenes/autoversion:latest-action`
+- **CLI Image**: `ghcr.io/trondhindenes/autoversion:latest`
+
+Both images are automatically built and published on each release with versioned tags:
+- `ghcr.io/trondhindenes/autoversion:1.0.0-action`
+- `ghcr.io/trondhindenes/autoversion:1.0-action`
+- `ghcr.io/trondhindenes/autoversion:1-action`
+- `ghcr.io/trondhindenes/autoversion:latest-action`
+
+### Version Pinning
+
+You can control which version of autoversion to use:
+
+```yaml
+# Use latest major version (recommended - gets updates)
+uses: trondhindenes/autoversion@v1
+with:
+  version: '1'  # Uses ghcr.io/trondhindenes/autoversion:1-action
+
+# Use specific minor version
+uses: trondhindenes/autoversion@v1
+with:
+  version: '1.0'  # Uses ghcr.io/trondhindenes/autoversion:1.0-action
+
+# Use exact version (most stable)
+uses: trondhindenes/autoversion@v1
+with:
+  version: '1.0.5'  # Uses ghcr.io/trondhindenes/autoversion:1.0.5-action
+
+# Use latest (not recommended for production)
+uses: trondhindenes/autoversion@v1
+with:
+  version: 'latest'  # Uses ghcr.io/trondhindenes/autoversion:latest-action
+```
+
+**Recommendation**: Use `version: '1'` (default) to automatically get patch updates while staying on the same major version.
 
 ## Support
 
