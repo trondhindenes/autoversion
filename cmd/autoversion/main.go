@@ -43,6 +43,8 @@ func initConfig() {
 
 	viper.SetDefault("mainBranch", "main")
 	viper.SetDefault("tagPrefix", "")
+	viper.SetDefault("versionPrefix", "")
+	viper.SetDefault("useCIBranch", false)
 
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
@@ -50,10 +52,42 @@ func initConfig() {
 }
 
 func run(cmd *cobra.Command, args []string) {
-	mainBranch := viper.GetString("mainBranch")
-	tagPrefix := viper.GetString("tagPrefix")
+	// Build config from viper settings
+	cfg := &config.Config{
+		MainBranch: viper.GetString("mainBranch"),
+	}
 
-	ver, err := version.Calculate(mainBranch, tagPrefix)
+	// Handle optional fields
+	if viper.IsSet("tagPrefix") {
+		tagPrefix := viper.GetString("tagPrefix")
+		cfg.TagPrefix = &tagPrefix
+	}
+
+	if viper.IsSet("versionPrefix") {
+		versionPrefix := viper.GetString("versionPrefix")
+		cfg.VersionPrefix = &versionPrefix
+	}
+
+	if viper.IsSet("useCIBranch") {
+		useCIBranch := viper.GetBool("useCIBranch")
+		cfg.UseCIBranch = &useCIBranch
+	}
+
+	if viper.IsSet("ciProviders") {
+		ciProviders := viper.GetStringMap("ciProviders")
+		cfg.CIProviders = make(map[string]*config.CIProvider)
+		for name, providerData := range ciProviders {
+			if providerMap, ok := providerData.(map[string]interface{}); ok {
+				if branchEnvVar, ok := providerMap["branchEnvVar"].(string); ok {
+					cfg.CIProviders[name] = &config.CIProvider{
+						BranchEnvVar: branchEnvVar,
+					}
+				}
+			}
+		}
+	}
+
+	ver, err := version.CalculateWithConfig(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

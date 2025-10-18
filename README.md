@@ -4,15 +4,18 @@ A Go-based CLI tool that automatically generates semantic versions based on the 
 
 ## Features
 
-- Generates semantic versions (semver) based on git commit history
+- **Pure semver output by default** (e.g., `1.0.0`, not `v1.0.0`)
+- Generates semantic versions based on git commit history
 - Git tag support: tags on commits take precedence over calculated versions
-- Configurable tag prefix stripping (e.g., `PRODUCT/2.0.0` → `2.0.0`)
+- Configurable tag prefix stripping (e.g., `v2.0.0` → `2.0.0` or `PRODUCT/2.0.0` → `2.0.0`)
+- Configurable version prefix for output (e.g., add `v` to output `v1.0.0`)
 - Main branch versions: `1.0.0`, `1.0.1`, `1.0.2`, etc.
 - Feature branch prerelease versions: `1.0.2-feature.0`, `1.0.2-feature.1`, etc.
 - Configurable main branch name (defaults to `main`)
+- CI/CD environment support with branch detection
 - Supports both YAML and JSON configuration files
 - JSON schema generation for configuration validation
-- Makefile with build, test, and development targets
+- Zero configuration required - works with sensible defaults
 
 ## Installation
 
@@ -70,19 +73,24 @@ This will output a semantic version like:
 
 ### Configuration
 
-Create a configuration file named `.autoversion.yaml` or `.autoversion.json` in your repository root:
+Create an optional configuration file named `.autoversion.yaml` or `.autoversion.json` in your repository root.
+
+**Note:** All configuration options are optional with sensible defaults (see Configuration Options section below).
 
 **YAML Example:**
 ```yaml
-mainBranch: main
-tagPrefix: "v"  # Optional: strip "v" prefix from tags (e.g., v2.0.0 → 2.0.0)
+mainBranch: main              # Default: "main"
+tagPrefix: "v"                # Default: "" (no stripping) - strips "v" from tags
+versionPrefix: ""             # Default: "" - set to "v" to output v1.0.0
+useCIBranch: false           # Default: false - enable for CI/CD environments
 ```
 
 **JSON Example:**
 ```json
 {
   "mainBranch": "main",
-  "tagPrefix": "PRODUCT/"
+  "tagPrefix": "PRODUCT/",
+  "versionPrefix": ""
 }
 ```
 
@@ -117,11 +125,16 @@ autoversion determines the version using the following priority order:
 ### Git Tag Versioning
 
 When the current commit has a git tag:
-- The tag name is used directly as the version
-- If `tagPrefix` is configured, it's stripped from the tag name
-- Example: With `tagPrefix: "v"`, tag `v2.0.0` becomes version `2.0.0`
-- Example: With `tagPrefix: "PRODUCT/"`, tag `PRODUCT/3.1.0` becomes version `3.1.0`
+- The tag name is used as the base version
+- If `tagPrefix` is configured, it's stripped from the tag name first
+- If `versionPrefix` is configured, it's added to the output
 - Tags take precedence regardless of branch
+
+**Examples:**
+- No config: tag `v2.0.0` → output `v2.0.0`
+- `tagPrefix: "v"`: tag `v2.0.0` → output `2.0.0`
+- `tagPrefix: "PRODUCT/"`: tag `PRODUCT/3.1.0` → output `3.1.0`
+- `tagPrefix: "v"` + `versionPrefix: "v"`: tag `v2.0.0` → output `v2.0.0`
 
 ### Main Branch Versioning
 
@@ -155,10 +168,72 @@ Examples:
 
 ## Configuration Options
 
+All configuration options are optional. If not specified, the defaults shown below will be used.
+
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `mainBranch` | string | `main` | The name of the main/primary branch |
-| `tagPrefix` | string | `""` | Prefix to strip from git tags (e.g., `"v"` or `"PRODUCT/"`) |
+| `mainBranch` | string | `"main"` | The name of the main/primary branch |
+| `tagPrefix` | string | `""` (empty) | Prefix to strip from git tags (e.g., `"v"` strips `v2.0.0` → `2.0.0`, `"PRODUCT/"` strips `PRODUCT/2.0.0` → `2.0.0`) |
+| `versionPrefix` | string | `""` (empty) | Prefix to add to the output version (e.g., `"v"` outputs `v1.0.0` instead of `1.0.0`) |
+| `useCIBranch` | boolean | `false` | Enable CI branch detection (useful for PR builds where CI checks out a detached HEAD) |
+| `ciProviders` | object | `{}` (empty) | Custom CI provider configurations for branch detection |
+
+### Configuration Examples
+
+**Minimal configuration (all defaults):**
+```yaml
+# .autoversion.yaml
+# Empty file - all defaults will be used
+```
+
+**Common configuration (strip 'v' from tags, keep pure semver output):**
+```yaml
+# .autoversion.yaml
+mainBranch: main
+tagPrefix: "v"  # Strips "v" prefix from tags (v2.0.0 → 2.0.0)
+# versionPrefix not set - output will be pure semver (1.0.0)
+```
+
+**Output version with 'v' prefix:**
+```yaml
+# .autoversion.yaml
+versionPrefix: "v"  # Outputs v1.0.0 instead of 1.0.0
+```
+
+**Product with custom tag prefix:**
+```yaml
+# .autoversion.yaml
+mainBranch: main
+tagPrefix: "PRODUCT/"  # Strips PRODUCT/ from tags
+```
+
+**CI/CD environment (GitHub Actions, GitLab CI, etc.):**
+```yaml
+# .autoversion.yaml
+mainBranch: main
+useCIBranch: true  # Detect actual branch from CI environment variables
+```
+
+**Custom CI provider:**
+```yaml
+# .autoversion.yaml
+mainBranch: main
+useCIBranch: true
+ciProviders:
+  my-ci-system:
+    branchEnvVar: "MY_CI_BRANCH_NAME"
+```
+
+### Default Behavior Summary
+
+When you run `autoversion` without any configuration file:
+- Main branch is assumed to be `main`
+- Git tags are used as-is (no prefix stripping)
+- Output is pure semver format (`1.0.0`, not `v1.0.0`)
+- Branch detection uses git's current branch (no CI environment detection)
+- First commit on main outputs `1.0.0`
+- Each subsequent commit increments patch version (`1.0.1`, `1.0.2`, etc.)
+- Feature branches output prerelease versions (`1.0.3-feature-name.0`)
 
 ## Examples
 
@@ -186,13 +261,18 @@ Using config file: .autoversion.json
 
 ### With git tags:
 ```bash
+# Without any configuration (tag returned as-is)
 $ git tag -a v2.0.0 -m "Release 2.0.0"
 $ autoversion
 v2.0.0
 
-# With tagPrefix configured as "v"
+# With tagPrefix: "v" configured (strips the "v")
 $ autoversion
 2.0.0
+
+# With tagPrefix: "v" AND versionPrefix: "v" configured
+$ autoversion
+v2.0.0
 ```
 
 ### With tag prefix (e.g., PRODUCT/):
