@@ -1,10 +1,16 @@
 package ci
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/trondhindenes/autoversion/internal/config"
 )
+
+// log writes a log message to stderr
+func log(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+}
 
 // WellKnownProviders contains default configurations for well-known CI providers
 var WellKnownProviders = map[string]*config.CIProvider{
@@ -59,6 +65,8 @@ func DetectBranch(cfg *config.Config) (string, bool) {
 
 		branchName := os.Getenv(provider.BranchEnvVar)
 		if branchName != "" {
+			log("CI provider is: %s", provider)
+			log("Found branch name: %s", branchName)
 			return branchName, true
 		}
 	}
