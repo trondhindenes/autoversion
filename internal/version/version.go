@@ -119,6 +119,24 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 		return "", fmt.Errorf("failed to get most recent tag: %w", err)
 	}
 
+	// Determine the initial version to use when no tags exist
+	initialVersionStr := "1.0.0"
+	if cfg.InitialVersion != nil && *cfg.InitialVersion != "" {
+		initialVersionStr = *cfg.InitialVersion
+		log("Using configured initial version: %s", initialVersionStr)
+	} else {
+		log("Using default initial version: %s", initialVersionStr)
+	}
+
+	// Parse and validate the initial version
+	initialVersion, err := parseVersion(initialVersionStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid initialVersion '%s': %w", initialVersionStr, err)
+	}
+	if !IsValidSemver(initialVersionStr) {
+		return "", fmt.Errorf("initialVersion '%s' is not valid semver", initialVersionStr)
+	}
+
 	var baseVersion Version
 	var useTagAsBase bool
 	if mostRecentTag != "" {
@@ -132,8 +150,8 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 
 		if !IsValidSemver(strippedTag) {
 			log("WARNING: Most recent tag '%s' is not valid semver (after stripping prefix), ignoring", strippedTag)
-			log("Falling back to commit-count-based versioning")
-			baseVersion = Version{Major: 1, Minor: 0, Patch: 0}
+			log("Falling back to commit-count-based versioning with initial version %s", initialVersionStr)
+			baseVersion = initialVersion
 			useTagAsBase = false
 			mostRecentTag = "" // Clear it so we use commit count
 		} else {
@@ -141,8 +159,8 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 			parsedVersion, err := parseVersion(strippedTag)
 			if err != nil {
 				log("WARNING: Failed to parse version from tag '%s': %v", strippedTag, err)
-				log("Falling back to commit-count-based versioning")
-				baseVersion = Version{Major: 1, Minor: 0, Patch: 0}
+				log("Falling back to commit-count-based versioning with initial version %s", initialVersionStr)
+				baseVersion = initialVersion
 				useTagAsBase = false
 				mostRecentTag = "" // Clear it so we use commit count
 			} else {
@@ -152,8 +170,8 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 			}
 		}
 	} else {
-		log("No tags found in commit history, using 1.0.0 as base version")
-		baseVersion = Version{Major: 1, Minor: 0, Patch: 0}
+		log("No tags found in commit history, using initial version %s", initialVersionStr)
+		baseVersion = initialVersion
 		useTagAsBase = false
 	}
 
@@ -180,8 +198,10 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("failed to get commit count: %w", err)
 			}
-			if commitCount > 0 {
-				version.Patch = commitCount - 1
+			// Start from the initial version and increment by (commitCount - 1)
+			// This way, first commit gets the initial version (e.g., 0.0.1), second gets 0.0.2, etc.
+			if commitCount > 1 {
+				version.Patch += (commitCount - 1)
 			}
 			log("Calculated version from commit count: %s", version.String())
 		}

@@ -44,6 +44,7 @@ func initConfig() {
 	viper.SetDefault("mainBranch", "main")
 	viper.SetDefault("tagPrefix", "")
 	viper.SetDefault("versionPrefix", "")
+	viper.SetDefault("initialVersion", "1.0.0")
 	viper.SetDefault("useCIBranch", false)
 
 	if err := viper.ReadInConfig(); err == nil {
@@ -66,6 +67,11 @@ func run(cmd *cobra.Command, args []string) {
 	if viper.IsSet("versionPrefix") {
 		versionPrefix := viper.GetString("versionPrefix")
 		cfg.VersionPrefix = &versionPrefix
+	}
+
+	if viper.IsSet("initialVersion") {
+		initialVersion := viper.GetString("initialVersion")
+		cfg.InitialVersion = &initialVersion
 	}
 
 	if viper.IsSet("useCIBranch") {
