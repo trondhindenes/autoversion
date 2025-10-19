@@ -181,12 +181,7 @@ func (g *Repo) GetMainBranchCommitCount(mainBranch string) (int, error) {
 }
 
 // GetCommitCountSinceBranchPoint returns the number of commits since branching from main
-func (g *Repo) GetCommitCountSinceBranchPoint(mainBranch string) (int, error) {
-	currentBranch, err := g.GetCurrentBranch()
-	if err != nil {
-		return 0, err
-	}
-
+func (g *Repo) GetCommitCountSinceBranchPoint(mainBranch, currentBranch string) (int, error) {
 	if currentBranch == mainBranch {
 		return 0, nil
 	}

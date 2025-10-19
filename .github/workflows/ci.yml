@@ -20,7 +20,7 @@ jobs:
           go-version: '1.25'
 
       - name: Run tests
-        run: make test
+        run: GITHUB_REF= GITHUB_HEAD_REF= make test
 
       - name: Run go vet
         run: make vet

@@ -135,18 +135,20 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 		return "", fmt.Errorf("invalid mainBranchBehavior '%s': must be 'release' or 'pre'", mainBranchBehavior)
 	}
 
-	// Try to detect branch from CI environment
-	currentBranch, err := repo.GetCurrentBranch()
-	if err != nil {
-		return "", fmt.Errorf("failed to get current branch: %w", err)
-	}
-	log("Current git branch: %s", currentBranch)
-
-	// Check if we should use CI branch detection
+	// Try to detect branch from CI environment first (for detached HEAD states in CI)
+	var currentBranch string
 	ciBranch, detected := ci.DetectBranch(cfg)
 	if detected {
-		log("CI branch detected: %s (overriding git branch %s)", ciBranch, currentBranch)
+		log("CI branch detected: %s", ciBranch)
 		currentBranch = ciBranch
+	} else {
+		// Fall back to git branch detection
+		var err error
+		currentBranch, err = repo.GetCurrentBranch()
+		if err != nil {
+			return "", fmt.Errorf("failed to get current branch: %w (note: this might be because you're in detached HEAD state - enable useCIBranch if in CI environment)", err)
+		}
+		log("Current git branch: %s", currentBranch)
 	}
 
 	// Check for most recent tag in history
@@ -290,7 +292,7 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 			version.Patch = mainCommitCount
 		}
 
-		branchCommitCount, err := repo.GetCommitCountSinceBranchPoint(mainBranch)
+		branchCommitCount, err := repo.GetCommitCountSinceBranchPoint(mainBranch, currentBranch)
 		if err != nil {
 			return "", fmt.Errorf("failed to get commit count since branch point: %w", err)
 		}

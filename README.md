@@ -125,7 +125,7 @@ mainBranchBehavior: "release"     # Default: "release" - or "pre" for prerelease
 tagPrefix: "v"                    # Default: "" (no stripping) - strips "v" from tags
 versionPrefix: ""                 # Default: "" - set to "v" to output v1.0.0
 initialVersion: "1.0.0"           # Default: "1.0.0" - version to use when no tags exist
-useCIBranch: false               # Default: false - enable for CI/CD environments
+useCIBranch: true                # Default: true - automatically detects branch in CI/CD environments
 ```
 
 **JSON Example:**
@@ -278,8 +278,10 @@ mainBranches: ["trunk", "mainline"]
 **CI/CD environment (GitHub Actions, GitLab CI, etc.):**
 ```yaml
 # .autoversion.yaml
-useCIBranch: true  # Detect actual branch from CI environment variables
+useCIBranch: true  # Enabled by default - detects actual branch from CI environment variables
 ```
+
+**Note:** `useCIBranch` defaults to `true` as of version 1.1.0, so CI environments work automatically without configuration.
 
 **Custom CI provider:**
 ```yaml
@@ -299,7 +301,7 @@ When you run `autoversion` without any configuration file:
 - Git tags are used as-is (no prefix stripping)
 - Output is pure semver format (`1.0.0`, not `v1.0.0`)
 - Initial version (when no tags exist) is `1.0.0`
-- Branch detection uses git's current branch (no CI environment detection)
+- Branch detection uses CI environment variables when available (GitHub Actions, GitLab CI, etc.), falls back to git's current branch
 - First commit on main outputs `1.0.0`
 - Each subsequent commit increments patch version (`1.0.1`, `1.0.2`, etc.)
 - Feature branches output prerelease versions (`1.0.3-feature-name.0`)

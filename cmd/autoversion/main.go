@@ -46,7 +46,7 @@ func initConfig() {
 	viper.SetDefault("tagPrefix", "")
 	viper.SetDefault("versionPrefix", "")
 	viper.SetDefault("initialVersion", "1.0.0")
-	viper.SetDefault("useCIBranch", false)
+	viper.SetDefault("useCIBranch", true)
 
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
