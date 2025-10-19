@@ -181,6 +181,7 @@ func (g *Repo) GetMainBranchCommitCount(mainBranch string) (int, error) {
 }
 
 // GetCommitCountSinceBranchPoint returns the number of commits since branching from main
+// This uses a proper merge-base algorithm to find the common ancestor
 func (g *Repo) GetCommitCountSinceBranchPoint(mainBranch, currentBranch string) (int, error) {
 	if currentBranch == mainBranch {
 		return 0, nil
@@ -204,48 +205,22 @@ func (g *Repo) GetCommitCountSinceBranchPoint(mainBranch, currentBranch string) 
 		}
 	}
 
-	// Get commits on current branch
-	currentCommits := make(map[plumbing.Hash]bool)
-	commitIter, err := g.repo.Log(&git.LogOptions{From: head.Hash()})
+	// Find merge base (common ancestor) between current HEAD and main branch
+	// This properly handles cases where main has moved forward after the branch was created
+	mergeBase, err := g.findMergeBase(head.Hash(), mainRef.Hash())
 	if err != nil {
-		return 0, fmt.Errorf("failed to get current branch log: %w", err)
+		return 0, fmt.Errorf("failed to find merge base: %w", err)
 	}
 
-	err = commitIter.ForEach(func(c *object.Commit) error {
-		currentCommits[c.Hash] = true
-		return nil
-	})
-	if err != nil {
-		return 0, fmt.Errorf("failed to iterate current branch commits: %w", err)
-	}
-
-	// Find common ancestor by checking main branch commits
-	mainCommitIter, err := g.repo.Log(&git.LogOptions{From: mainRef.Hash()})
-	if err != nil {
-		return 0, fmt.Errorf("failed to get main branch log: %w", err)
-	}
-
-	var commonAncestor plumbing.Hash
-	err = mainCommitIter.ForEach(func(c *object.Commit) error {
-		if currentCommits[c.Hash] {
-			commonAncestor = c.Hash
-			return storer.ErrStop
-		}
-		return nil
-	})
-	if err != nil && err != storer.ErrStop {
-		return 0, fmt.Errorf("failed to find common ancestor: %w", err)
-	}
-
-	// Count commits since common ancestor
+	// Count commits from HEAD back to merge base
 	count := 0
-	commitIter2, err := g.repo.Log(&git.LogOptions{From: head.Hash()})
+	commitIter, err := g.repo.Log(&git.LogOptions{From: head.Hash()})
 	if err != nil {
 		return 0, fmt.Errorf("failed to get commit log: %w", err)
 	}
 
-	err = commitIter2.ForEach(func(c *object.Commit) error {
-		if c.Hash == commonAncestor {
+	err = commitIter.ForEach(func(c *object.Commit) error {
+		if c.Hash == mergeBase {
 			return storer.ErrStop
 		}
 		count++
@@ -256,6 +231,53 @@ func (g *Repo) GetCommitCountSinceBranchPoint(mainBranch, currentBranch string) 
 	}
 
 	return count, nil
+}
+
+// findMergeBase finds the best common ancestor between two commits
+// This implements a simplified version of git merge-base
+func (g *Repo) findMergeBase(commit1Hash, commit2Hash plumbing.Hash) (plumbing.Hash, error) {
+	// Get all ancestors of commit1
+	ancestors1 := make(map[plumbing.Hash]int)
+	distance := 0
+
+	commitIter, err := g.repo.Log(&git.LogOptions{From: commit1Hash})
+	if err != nil {
+		return plumbing.ZeroHash, err
+	}
+
+	err = commitIter.ForEach(func(c *object.Commit) error {
+		ancestors1[c.Hash] = distance
+		distance++
+		return nil
+	})
+	if err != nil {
+		return plumbing.ZeroHash, err
+	}
+
+	// Walk commit2's history until we find a commit that's also in commit1's history
+	// This is the merge base
+	commitIter2, err := g.repo.Log(&git.LogOptions{From: commit2Hash})
+	if err != nil {
+		return plumbing.ZeroHash, err
+	}
+
+	var mergeBase plumbing.Hash
+	err = commitIter2.ForEach(func(c *object.Commit) error {
+		if _, exists := ancestors1[c.Hash]; exists {
+			mergeBase = c.Hash
+			return storer.ErrStop
+		}
+		return nil
+	})
+	if err != nil && err != storer.ErrStop {
+		return plumbing.ZeroHash, err
+	}
+
+	if mergeBase.IsZero() {
+		return plumbing.ZeroHash, fmt.Errorf("no common ancestor found")
+	}
+
+	return mergeBase, nil
 }
 
 // GetTagOnCurrentCommit returns the tag on the current HEAD commit, if any
