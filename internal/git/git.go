@@ -11,6 +11,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/storer"
+	"github.com/trondhindenes/autoversion/internal/defaults"
 )
 
 // Repo represents a git repository
@@ -402,11 +403,10 @@ func StripTagPrefix(tag, prefix string) string {
 
 // SanitizeBranchName converts a branch name to a valid prerelease identifier
 func SanitizeBranchName(branch string) string {
-	// Remove common prefixes
-	branch = strings.TrimPrefix(branch, "feature/")
-	branch = strings.TrimPrefix(branch, "bugfix/")
-	branch = strings.TrimPrefix(branch, "hotfix/")
-	branch = strings.TrimPrefix(branch, "release/")
+	// Remove common prefixes using defaults
+	for _, prefix := range defaults.BranchPrefixesToStrip {
+		branch = strings.TrimPrefix(branch, prefix)
+	}
 
 	// Replace invalid characters with hyphens
 	reg := regexp.MustCompile(`[^a-zA-Z0-9-]`)
@@ -423,7 +423,7 @@ func SanitizeBranchName(branch string) string {
 	branch = strings.ToLower(branch)
 
 	if branch == "" {
-		branch = "unknown"
+		branch = defaults.UnknownBranchName
 	}
 
 	return branch

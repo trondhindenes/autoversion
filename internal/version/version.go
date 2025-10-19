@@ -8,6 +8,7 @@ import (
 
 	"github.com/trondhindenes/autoversion/internal/ci"
 	"github.com/trondhindenes/autoversion/internal/config"
+	"github.com/trondhindenes/autoversion/internal/defaults"
 	"github.com/trondhindenes/autoversion/internal/git"
 )
 
@@ -109,7 +110,7 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 			// Backward compatibility with old config
 			mainBranches = []string{cfg.MainBranch}
 		} else {
-			mainBranches = []string{"main", "master"}
+			mainBranches = defaults.MainBranches
 		}
 	}
 	log("Configured main branches: %v", mainBranches)
@@ -122,7 +123,7 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 	log("Using main branch: %s", mainBranch)
 
 	// Get main branch behavior
-	mainBranchBehavior := "release"
+	mainBranchBehavior := defaults.MainBranchBehavior
 	if cfg.MainBranchBehavior != nil && *cfg.MainBranchBehavior != "" {
 		mainBranchBehavior = *cfg.MainBranchBehavior
 		log("Using configured main branch behavior: %s", mainBranchBehavior)
@@ -131,8 +132,15 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 	}
 
 	// Validate main branch behavior
-	if mainBranchBehavior != "release" && mainBranchBehavior != "pre" {
-		return "", fmt.Errorf("invalid mainBranchBehavior '%s': must be 'release' or 'pre'", mainBranchBehavior)
+	validBehavior := false
+	for _, valid := range defaults.ValidMainBranchBehaviors {
+		if mainBranchBehavior == valid {
+			validBehavior = true
+			break
+		}
+	}
+	if !validBehavior {
+		return "", fmt.Errorf("invalid mainBranchBehavior '%s': must be one of %v", mainBranchBehavior, defaults.ValidMainBranchBehaviors)
 	}
 
 	// Try to detect branch from CI environment first (for detached HEAD states in CI)
@@ -159,7 +167,7 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 	}
 
 	// Determine the initial version to use when no tags exist
-	initialVersionStr := "1.0.0"
+	initialVersionStr := defaults.InitialVersion
 	if cfg.InitialVersion != nil && *cfg.InitialVersion != "" {
 		initialVersionStr = *cfg.InitialVersion
 		log("Using configured initial version: %s", initialVersionStr)
@@ -239,7 +247,7 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 				version.Patch = baseVersion.Patch + commitsSinceTag
 				if commitsSinceTag > 0 {
 					// There are commits since the tag, create prerelease
-					version.Prerelease = "pre"
+					version.Prerelease = defaults.PrereleaseID
 					version.Build = commitsSinceTag - 1
 					log("Created prerelease version %d commits since tag: %s", commitsSinceTag, version.String())
 				} else {
@@ -254,7 +262,7 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 				}
 				// First commit gets initial version as prerelease: 1.0.0-pre.0
 				// Subsequent commits increment: 1.0.0-pre.1, 1.0.0-pre.2, etc.
-				version.Prerelease = "pre"
+				version.Prerelease = defaults.PrereleaseID
 				version.Build = commitCount - 1
 				log("Calculated prerelease version from commit count: %s", version.String())
 			}

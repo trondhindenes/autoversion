@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/trondhindenes/autoversion/internal/config"
+	"github.com/trondhindenes/autoversion/internal/defaults"
 	"github.com/trondhindenes/autoversion/internal/version"
 )
 
@@ -41,12 +42,12 @@ func initConfig() {
 		viper.SetConfigType("yaml")
 	}
 
-	viper.SetDefault("mainBranches", []string{"main", "master"})
-	viper.SetDefault("mainBranchBehavior", "release")
-	viper.SetDefault("tagPrefix", "")
-	viper.SetDefault("versionPrefix", "")
-	viper.SetDefault("initialVersion", "1.0.0")
-	viper.SetDefault("useCIBranch", true)
+	viper.SetDefault("mainBranches", defaults.MainBranches)
+	viper.SetDefault("mainBranchBehavior", defaults.MainBranchBehavior)
+	viper.SetDefault("tagPrefix", defaults.DefaultTagPrefix)
+	viper.SetDefault("versionPrefix", defaults.DefaultVersionPrefix)
+	viper.SetDefault("initialVersion", defaults.InitialVersion)
+	viper.SetDefault("useCIBranch", defaults.DefaultUseCIBranch)
 
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
@@ -65,7 +66,7 @@ func run(cmd *cobra.Command, args []string) {
 	} else if viper.IsSet("mainBranches") {
 		cfg.MainBranches = viper.GetStringSlice("mainBranches")
 	} else {
-		cfg.MainBranches = []string{"main", "master"}
+		cfg.MainBranches = defaults.MainBranches
 	}
 
 	// Handle optional fields
