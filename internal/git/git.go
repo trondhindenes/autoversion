@@ -187,16 +187,31 @@ func (g *Repo) GetCommitCountSinceBranchPoint(mainBranch, currentBranch string) 
 		return 0, nil
 	}
 
-	head, err := g.repo.Head()
+	// Get reference for the current branch
+	// Try local branch first, then remote (important for CI environments)
+	currentBranchRefName := plumbing.NewBranchReferenceName(currentBranch)
+	currentRef, err := g.repo.Reference(currentBranchRefName, true)
+
 	if err != nil {
-		return 0, fmt.Errorf("failed to get HEAD: %w", err)
+		// Local branch doesn't exist, try remote branch (e.g., origin/feature-branch)
+		remoteBranchRefName := plumbing.NewRemoteReferenceName("origin", currentBranch)
+		currentRef, err = g.repo.Reference(remoteBranchRefName, true)
+		if err != nil {
+			// If we can't find the branch reference, fall back to HEAD
+			// This handles cases where we're in detached HEAD state
+			head, err := g.repo.Head()
+			if err != nil {
+				return 0, fmt.Errorf("failed to get HEAD and couldn't find branch reference: %w", err)
+			}
+			currentRef = head
+		}
 	}
 
-	// Try local branch first
+	// Get reference for the main branch
+	// Try local branch first, then remote
 	mainRefName := plumbing.NewBranchReferenceName(mainBranch)
 	mainRef, err := g.repo.Reference(mainRefName, true)
 
-	// If local branch doesn't exist, try remote branch
 	if err != nil {
 		remoteBranchRefName := plumbing.NewRemoteReferenceName("origin", mainBranch)
 		mainRef, err = g.repo.Reference(remoteBranchRefName, true)
@@ -205,16 +220,16 @@ func (g *Repo) GetCommitCountSinceBranchPoint(mainBranch, currentBranch string) 
 		}
 	}
 
-	// Find merge base (common ancestor) between current HEAD and main branch
+	// Find merge base (common ancestor) between current branch and main branch
 	// This properly handles cases where main has moved forward after the branch was created
-	mergeBase, err := g.findMergeBase(head.Hash(), mainRef.Hash())
+	mergeBase, err := g.findMergeBase(currentRef.Hash(), mainRef.Hash())
 	if err != nil {
 		return 0, fmt.Errorf("failed to find merge base: %w", err)
 	}
 
-	// Count commits from HEAD back to merge base
+	// Count commits from current branch back to merge base
 	count := 0
-	commitIter, err := g.repo.Log(&git.LogOptions{From: head.Hash()})
+	commitIter, err := g.repo.Log(&git.LogOptions{From: currentRef.Hash()})
 	if err != nil {
 		return 0, fmt.Errorf("failed to get commit log: %w", err)
 	}
