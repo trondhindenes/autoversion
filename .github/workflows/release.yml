@@ -239,6 +239,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
+          target: autoversion
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -257,7 +258,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: Dockerfile.github-action
+          target: autoversion-action
           push: true
           tags: ${{ steps.meta-action.outputs.tags }}
           labels: ${{ steps.meta-action.outputs.labels }}

@@ -17,7 +17,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o autoversion ./cmd/autoversion
 
 # Final stage
-FROM alpine:latest
+FROM alpine:latest AS autoversion
 
 # Install git (required for autoversion to work with repositories)
 RUN apk add --no-cache git
@@ -30,3 +30,18 @@ WORKDIR /repo
 
 # Default command
 ENTRYPOINT ["/usr/local/bin/autoversion"]
+
+FROM autoversion AS autoversion-action
+
+RUN apk add --no-cache bash
+RUN git config --global --add safe.directory '*'
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Set working directory
+WORKDIR /github/workspace
+
+# Set entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
