@@ -80,39 +80,6 @@ func TestDetectBranch(t *testing.T) {
 			expectedFound:  false,
 		},
 		{
-			name: "Custom CI provider",
-			config: &config.Config{
-				UseCIBranch: boolPtr(true),
-				CIProviders: map[string]*config.CIProvider{
-					"custom-ci": {
-						BranchEnvVar: "CUSTOM_BRANCH_VAR",
-					},
-				},
-			},
-			envVars: map[string]string{
-				"CUSTOM_BRANCH_VAR": "custom/branch",
-			},
-			expectedBranch: "custom/branch",
-			expectedFound:  true,
-		},
-		{
-			name: "Custom provider overrides well-known provider",
-			config: &config.Config{
-				UseCIBranch: boolPtr(true),
-				CIProviders: map[string]*config.CIProvider{
-					"github-actions": {
-						BranchEnvVar: "CUSTOM_GITHUB_VAR",
-					},
-				},
-			},
-			envVars: map[string]string{
-				"CUSTOM_GITHUB_VAR": "override/branch",
-				"GITHUB_HEAD_REF":   "original/branch",
-			},
-			expectedBranch: "override/branch",
-			expectedFound:  true,
-		},
-		{
 			name: "Multiple CI vars set - first found wins",
 			config: &config.Config{
 				UseCIBranch: boolPtr(true),

@@ -26,57 +26,32 @@ func DetectBranch(cfg *config.Config) (string, bool) {
 		return "", false
 	}
 
-	// Check if user has overridden the github-actions provider
-	hasGitHubOverride := false
-	if cfg.CIProviders != nil {
-		if _, exists := cfg.CIProviders["github-actions"]; exists {
-			hasGitHubOverride = true
-		}
-	}
-
-	// Special handling for GitHub Actions (only if not overridden by user config)
+	// Special handling for GitHub Actions
 	// GITHUB_HEAD_REF is set for pull requests
 	// GITHUB_REF is set for all events (format: refs/heads/branch-name or refs/tags/tag-name)
-	if !hasGitHubOverride {
-		if githubHeadRef := os.Getenv("GITHUB_HEAD_REF"); githubHeadRef != "" {
-			log("Detected GitHub Actions (pull request)")
-			log("Found branch name from GITHUB_HEAD_REF: %s", githubHeadRef)
-			return githubHeadRef, true
+	if githubHeadRef := os.Getenv("GITHUB_HEAD_REF"); githubHeadRef != "" {
+		log("Detected GitHub Actions (pull request)")
+		log("Found branch name from GITHUB_HEAD_REF: %s", githubHeadRef)
+		return githubHeadRef, true
+	}
+	if githubRef := os.Getenv("GITHUB_REF"); githubRef != "" {
+		// Parse GITHUB_REF to extract branch name
+		// Format: refs/heads/branch-name -> branch-name
+		if strings.HasPrefix(githubRef, "refs/heads/") {
+			branchName := strings.TrimPrefix(githubRef, "refs/heads/")
+			log("Detected GitHub Actions (push)")
+			log("Found branch name from GITHUB_REF: %s", branchName)
+			return branchName, true
 		}
-		if githubRef := os.Getenv("GITHUB_REF"); githubRef != "" {
-			// Parse GITHUB_REF to extract branch name
-			// Format: refs/heads/branch-name -> branch-name
-			if strings.HasPrefix(githubRef, "refs/heads/") {
-				branchName := strings.TrimPrefix(githubRef, "refs/heads/")
-				log("Detected GitHub Actions (push)")
-				log("Found branch name from GITHUB_REF: %s", branchName)
-				return branchName, true
-			}
-			// If it's a tag, we still want to know
-			if strings.HasPrefix(githubRef, "refs/tags/") {
-				log("Detected GitHub Actions (tag event)")
-				log("GITHUB_REF is a tag, not a branch: %s", githubRef)
-			}
+		// If it's a tag, we still want to know
+		if strings.HasPrefix(githubRef, "refs/tags/") {
+			log("Detected GitHub Actions (tag event)")
+			log("GITHUB_REF is a tag, not a branch: %s", githubRef)
 		}
 	}
 
-	// Merge user-configured providers with well-known providers
-	providers := make(map[string]*config.CIProvider)
-
-	// Start with well-known providers from defaults
-	for k, v := range defaults.WellKnownCIProviders {
-		providers[k] = v
-	}
-
-	// Override with user-configured providers
-	if cfg.CIProviders != nil {
-		for k, v := range cfg.CIProviders {
-			providers[k] = v
-		}
-	}
-
-	// Try each provider's environment variable
-	for _, provider := range providers {
+	// Try each well-known provider's environment variable
+	for _, provider := range defaults.WellKnownCIProviders {
 		if provider.BranchEnvVar == "" {
 			continue
 		}

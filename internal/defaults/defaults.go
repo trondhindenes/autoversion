@@ -1,7 +1,5 @@
 package defaults
 
-import "github.com/trondhindenes/autoversion/internal/config"
-
 // Application default values - single source of truth for all defaults
 const (
 	// Version-related defaults
@@ -30,9 +28,14 @@ var MainBranches = []string{"main", "master"}
 // ValidMainBranchBehaviors are the allowed values for main branch behavior
 var ValidMainBranchBehaviors = []string{"release", "pre"}
 
+// CIProvider represents configuration for a specific CI provider
+type CIProvider struct {
+	BranchEnvVar string
+}
+
 // WellKnownCIProviders contains default configurations for well-known CI providers
 // This is the source of truth for CI provider defaults
-var WellKnownCIProviders = map[string]*config.CIProvider{
+var WellKnownCIProviders = map[string]*CIProvider{
 	"github-actions": {
 		BranchEnvVar: "GITHUB_HEAD_REF",
 	},

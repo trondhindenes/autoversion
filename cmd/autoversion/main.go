@@ -95,20 +95,6 @@ func run(cmd *cobra.Command, args []string) {
 		cfg.UseCIBranch = &useCIBranch
 	}
 
-	if viper.IsSet("ciProviders") {
-		ciProviders := viper.GetStringMap("ciProviders")
-		cfg.CIProviders = make(map[string]*config.CIProvider)
-		for name, providerData := range ciProviders {
-			if providerMap, ok := providerData.(map[string]interface{}); ok {
-				if branchEnvVar, ok := providerMap["branchEnvVar"].(string); ok {
-					cfg.CIProviders[name] = &config.CIProvider{
-						BranchEnvVar: branchEnvVar,
-					}
-				}
-			}
-		}
-	}
-
 	ver, err := version.CalculateWithConfig(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

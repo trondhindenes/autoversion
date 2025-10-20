@@ -3,14 +3,13 @@
 A Go-based CLI tool that automatically generates semantic versions based on the state of a git repository.
 
 ## Features
-
-- **Pure semver output by default** (e.g., `1.0.0`, not `v1.0.0`)
-- Generates semantic versions based on git commit history
+- Generates unique semantic versions based on git commit history
+- Pure semver output by default (e.g., `1.0.0`, but can be prefixed to for example `v1.0.0`)
 - Git tag support: tags on commits take precedence over calculated versions
 - Configurable tag prefix stripping (e.g., `v2.0.0` → `2.0.0` or `PRODUCT/2.0.0` → `2.0.0`)
 - Configurable version prefix for output (e.g., add `v` to output `v1.0.0`)
-- **Automatic main branch detection**: Works with both `main` and `master` branches by default
-- **Flexible main branch behavior**:
+- Automatic main branch detection: Works with both `main` and `master` branches by default, can be configured
+- Flexible main branch behavior:
   - `release` mode (default): Main branch creates release versions like `1.0.0`, `1.0.1`, `1.0.2`
   - `pre` mode: Main branch creates prerelease versions like `1.0.0-pre.0`, `1.0.0-pre.1` (only tagged commits create releases)
 - Feature branch prerelease versions: `1.0.2-feature.0`, `1.0.2-feature.1`, etc.
@@ -33,13 +32,13 @@ The easiest way to use autoversion in GitHub Actions:
 ```yaml
 - name: Calculate version
   id: version
-  uses: trondhindenes/autoversion@v1
+  uses: trondhindenes/autoversion-action@v1
 
 - name: Use the version
   run: echo "Version is ${{ steps.version.outputs.version }}"
 ```
 
-See [GitHub Action documentation](ACTION.md) for complete usage examples.
+See [GitHub Action documentation](https://github.com/trondhindenes/autoversion-action) for complete usage examples.
 
 ### Docker
 
@@ -222,8 +221,7 @@ All configuration options are optional. If not specified, the defaults shown bel
 | `tagPrefix` | string | `""` (empty) | Prefix to strip from git tags (e.g., `"v"` strips `v2.0.0` → `2.0.0`, `"PRODUCT/"` strips `PRODUCT/2.0.0` → `2.0.0`) |
 | `versionPrefix` | string | `""` (empty) | Prefix to add to the output version (e.g., `"v"` outputs `v1.0.0` instead of `1.0.0`) |
 | `initialVersion` | string | `"1.0.0"` | The initial version to use when no tags exist in the repository (e.g., `"0.0.1"` or `"2.0.0"`). Must be valid semver |
-| `useCIBranch` | boolean | `false` | Enable CI branch detection (useful for PR builds where CI checks out a detached HEAD) |
-| `ciProviders` | object | `{}` (empty) | Custom CI provider configurations for branch detection |
+| `useCIBranch` | boolean | `false` | Enable CI branch detection (useful for PR builds where CI checks out a detached HEAD). Automatically detects GitHub Actions, GitLab CI, CircleCI, Travis CI, Jenkins, and Azure Pipelines |
 
 ### Configuration Examples
 
@@ -279,18 +277,7 @@ mainBranches: ["trunk", "mainline"]
 ```yaml
 # .autoversion.yaml
 useCIBranch: true  # Enabled by default - detects actual branch from CI environment variables
-```
-
-**Note:** `useCIBranch` defaults to `true` as of version 1.1.0, so CI environments work automatically without configuration.
-
-**Custom CI provider:**
-```yaml
-# .autoversion.yaml
-mainBranch: main
-useCIBranch: true
-ciProviders:
-  my-ci-system:
-    branchEnvVar: "MY_CI_BRANCH_NAME"
+# Automatically detects: GitHub Actions, GitLab CI, CircleCI, Travis CI, Jenkins, Azure Pipelines
 ```
 
 ### Default Behavior Summary
@@ -323,12 +310,6 @@ $ autoversion
 1.0.6-new-widget.3
 ```
 
-### With custom config:
-```bash
-$ autoversion --config .autoversion.json
-Using config file: .autoversion.json
-1.0.2
-```
 
 ### With git tags:
 ```bash
