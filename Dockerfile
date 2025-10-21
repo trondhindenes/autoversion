@@ -3,7 +3,7 @@ FROM golang:1.25-alpine AS builder
 
 # Install git (needed for go-git)
 RUN apk add --no-cache git
-
+ARG VERSION=0.0.1-dev
 WORKDIR /build
 
 # Copy go mod files
@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o autoversion ./cmd/autoversion
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=${VERSION}" -o autoversion ./cmd/autoversion
 
 # Final stage
 FROM alpine:latest AS autoversion
