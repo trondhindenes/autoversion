@@ -49,6 +49,8 @@ jobs:
       - name: Calculate version
         id: get_version
         uses: trondhindenes/autoversion-action@v1
+        with:
+          config: '.autoversion.yaml'
 
   build:
     name: Build binaries
