@@ -1,0 +1,12 @@
+# Autoversion configuration for this repository
+
+# Main branch name
+mainBranch: main
+
+# Strip "v" prefix from git tags
+# This allows tags like "v1.0.0" to be read as "1.0.0"
+tagPrefix: "v"
+
+# Don't add prefix to output (pure semver)
+# The GitHub Actions workflow will add "v" when creating tags
+# versionPrefix: ""  # This is the default, so we don't need to set it

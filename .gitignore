@@ -31,10 +31,6 @@ go.work
 .DS_Store
 Thumbs.db
 
-# Config file (keep examples only)
-.autoversion.yaml
-.autoversion.json
-
 # Build artifacts
 dist/
 *.tar.gz
