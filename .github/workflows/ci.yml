@@ -119,6 +119,7 @@ jobs:
           fi
 
           # Build the binary
+          echo "version is ${{ needs.get-version.outputs.version }}"
           go build -ldflags="-s -w -X main.Version=${{ needs.get-version.outputs.version }}" \
             -o "${BINARY_NAME}" \
             ./cmd/autoversion
