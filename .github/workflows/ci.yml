@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches-ignore:
-      - main
+
+permissions:
+  contents: write
 
 jobs:
   test:
@@ -33,35 +34,59 @@ jobs:
             exit 1
           fi
 
-  build:
-    name: Build
+  get-version:
+    name: Get Version
     runs-on: ubuntu-latest
-
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      is-prerelease: ${{ steps.get_version.outputs.is-prerelease }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          fetch-depth: 0
 
-      - name: Build
-        run: make build
+      - name: Calculate version
+        id: get_version
+        uses: trondhindenes/autoversion-action@v1
+        with:
+          config: '.autoversion.yaml'
 
-      - name: Verify binary works
-        run: |
-          ./bin/autoversion --help
-          ./bin/autoversion schema
-
-  cross-compile:
-    name: Cross-compile check
+  build:
+    name: Build binaries
     runs-on: ubuntu-latest
+    needs: 
+    - test
+    - get-version
     strategy:
       matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
+        include:
+          # Linux
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: linux
+            goarch: arm
+            goarm: 7
 
+          # macOS
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+
+          # Windows
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+
+          # FreeBSD
+          - goos: freebsd
+            goarch: amd64
+          - goos: freebsd
+            goarch: arm64
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -69,12 +94,95 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
 
-      - name: Cross-compile
+      - name: Verify directory structure
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          echo "Checking for cmd/autoversion:"
+          ls -la cmd/
+          ls -la cmd/autoversion/ || echo "cmd/autoversion not found!"
+
+      - name: Build binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: 0
         run: |
-          go build -o autoversion-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/autoversion
+          # Set binary name based on OS
+          BINARY_NAME="autoversion"
+          if [ "$GOOS" = "windows" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
+
+          # Build the binary
+          go build -ldflags="-s -w -X main.version=${{ needs.get-version.outputs.version }}" \
+            -o "${BINARY_NAME}" \
+            ./cmd/autoversion
+
+          # Create archive name with convention: autoversion-{os}-{arch}[.exe]
+          ARCHIVE_BASE="autoversion-${GOOS}-${GOARCH}"
+          if [ -n "$GOARM" ]; then
+            ARCHIVE_BASE="${ARCHIVE_BASE}v${GOARM}"
+          fi
+
+          # Package based on OS
+          if [ "$GOOS" = "windows" ]; then
+            # For Windows, create a zip
+            zip "${ARCHIVE_BASE}.zip" "${BINARY_NAME}"
+            echo "ASSET=${ARCHIVE_BASE}.zip" >> $GITHUB_ENV
+          else
+            # For Unix-like systems, create a tar.gz
+            tar czf "${ARCHIVE_BASE}.tar.gz" "${BINARY_NAME}"
+            echo "ASSET=${ARCHIVE_BASE}.tar.gz" >> $GITHUB_ENV
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoversion-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('v{0}', matrix.goarm) || '' }}
+          path: ${{ env.ASSET }}
+          retention-days: 7
+
+  release:
+    name: Create Release
+    needs: 
+      - build
+      - get-version
+    if: needs.get-version.outputs.is-prerelease == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create and push tag
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${VERSION}" -m "Release ${VERSION}"
+          git push origin "${VERSION}"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
