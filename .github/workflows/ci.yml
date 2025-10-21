@@ -160,7 +160,7 @@ jobs:
 
       - name: Create and push tag
         run: |
-          VERSION="${{ needs.build.outputs.version }}"
+          VERSION="v${{ needs.get-version.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${VERSION}" -m "Release ${VERSION}"
@@ -177,7 +177,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.get_version.outputs.version }}
+          tag_name: v${{ needs.get-version.outputs.version }}
           draft: false
           prerelease: false
           generate_release_notes: true
