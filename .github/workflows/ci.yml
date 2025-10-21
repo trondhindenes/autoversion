@@ -191,17 +191,36 @@ jobs:
   docker:
     name: Build and push Docker image
     needs:
-    - release
+    - build
     - get-version
-    if: needs.get-version.outputs.is-prerelease == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            artifact: autoversion-linux-amd64
+          - platform: linux/arm64
+            artifact: autoversion-linux-arm64
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: docker-context
+
+      - name: Extract binary from archive
+        run: |
+          cd docker-context
+          tar -xzf *.tar.gz
+          rm *.tar.gz
+          chmod +x autoversion
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -222,21 +241,21 @@ jobs:
             type=semver,pattern={{version}},value=${{ needs.get-version.outputs.version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.get-version.outputs.version }}
             type=semver,pattern={{major}},value=${{ needs.get-version.outputs.version }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ needs.get-version.outputs.is-prerelease == 'false' }}
+
+      - name: Copy Dockerfile to context
+        run: cp Dockerfile docker-context/
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: docker-context
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           target: autoversion
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VERSION=${{ needs.get-version.outputs.version }}
+          provenance: false
 
       - name: Extract metadata for action image
         id: meta-action
@@ -247,18 +266,18 @@ jobs:
             type=semver,pattern={{version}}-action,value=${{ needs.get-version.outputs.version }}
             type=semver,pattern={{major}}.{{minor}}-action,value=${{ needs.get-version.outputs.version }}
             type=semver,pattern={{major}}-action,value=${{ needs.get-version.outputs.version }}
-            type=raw,value=latest-action
+            type=raw,value=latest-action,enable=${{ needs.get-version.outputs.is-prerelease == 'false' }}
+
+      - name: Copy entrypoint script to context
+        run: cp entrypoint.sh docker-context/
 
       - name: Build and push GitHub Action image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: docker-context
           target: autoversion-action
           push: true
           tags: ${{ steps.meta-action.outputs.tags }}
           labels: ${{ steps.meta-action.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VERSION=${{ needs.get-version.outputs.version }}
+          platforms: ${{ matrix.platform }}
+          provenance: false
