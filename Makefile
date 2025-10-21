@@ -6,7 +6,8 @@ BIN_DIR=bin
 CMD_DIR=cmd/autoversion
 GO=go
 GOFLAGS=
-LDFLAGS=
+VERSION?=0.0.1-dev
+LDFLAGS=-X 'main.Version=$(VERSION)'
 
 # Default target
 .DEFAULT_GOAL := help

@@ -12,6 +12,8 @@ import (
 )
 
 var (
+	// Version is set at build time via -ldflags
+	Version = "0.0.1-dev"
 	cfgFile string
 	rootCmd = &cobra.Command{
 		Use:   "autoversion",
@@ -25,12 +27,20 @@ It calculates versions for the main branch (e.g., 1.0.0, 1.0.1) and prerelease v
 		Short: "Generate JSON schema for the configuration file",
 		Run:   runSchema,
 	}
+	versionCmd = &cobra.Command{
+		Use:   "version",
+		Short: "Print the version number",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println(Version)
+		},
+	}
 )
 
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .autoversion.yaml)")
 	rootCmd.AddCommand(schemaCmd)
+	rootCmd.AddCommand(versionCmd)
 }
 
 func initConfig() {
