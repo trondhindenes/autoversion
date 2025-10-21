@@ -197,27 +197,30 @@ jobs:
     permissions:
       contents: read
       packages: write
-    strategy:
-      matrix:
-        include:
-          - platform: linux/amd64
-            artifact: autoversion-linux-amd64
-          - platform: linux/arm64
-            artifact: autoversion-linux-arm64
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download binary artifact
+      - name: Download amd64 binary artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: docker-context
+          name: autoversion-linux-amd64
+          path: docker-context/amd64
 
-      - name: Extract binary from archive
+      - name: Download arm64 binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: autoversion-linux-arm64
+          path: docker-context/arm64
+
+      - name: Extract binaries from archives
         run: |
-          cd docker-context
+          cd docker-context/amd64
+          tar -xzf *.tar.gz
+          rm *.tar.gz
+          chmod +x autoversion
+          cd ../arm64
           tar -xzf *.tar.gz
           rm *.tar.gz
           chmod +x autoversion
@@ -253,7 +256,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64,linux/arm64
           target: autoversion
           provenance: false
 
@@ -279,5 +282,5 @@ jobs:
           push: true
           tags: ${{ steps.meta-action.outputs.tags }}
           labels: ${{ steps.meta-action.outputs.labels }}
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64,linux/arm64
           provenance: false

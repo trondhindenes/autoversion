@@ -5,7 +5,9 @@ FROM alpine:latest AS autoversion
 RUN apk add --no-cache git
 
 # Copy the pre-built binary (provided by build context)
-COPY autoversion /usr/local/bin/autoversion
+# Use TARGETARCH to select the correct binary for the platform
+ARG TARGETARCH
+COPY ${TARGETARCH}/autoversion /usr/local/bin/autoversion
 
 # Set working directory
 WORKDIR /repo
