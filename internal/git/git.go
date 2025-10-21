@@ -296,6 +296,70 @@ func (g *Repo) findMergeBase(commit1Hash, commit2Hash plumbing.Hash) (plumbing.H
 	return mergeBase, nil
 }
 
+// GetMainBranchCommitsSinceBranchPoint returns the number of commits on main branch
+// since the point where the current branch diverged from main
+func (g *Repo) GetMainBranchCommitsSinceBranchPoint(mainBranch, currentBranch string) (int, error) {
+	if currentBranch == mainBranch {
+		return 0, nil
+	}
+
+	// Get reference for the current branch
+	currentBranchRefName := plumbing.NewBranchReferenceName(currentBranch)
+	currentRef, err := g.repo.Reference(currentBranchRefName, true)
+
+	if err != nil {
+		// Local branch doesn't exist, try remote branch
+		remoteBranchRefName := plumbing.NewRemoteReferenceName("origin", currentBranch)
+		currentRef, err = g.repo.Reference(remoteBranchRefName, true)
+		if err != nil {
+			// If we can't find the branch reference, fall back to HEAD
+			head, err := g.repo.Head()
+			if err != nil {
+				return 0, fmt.Errorf("failed to get HEAD and couldn't find branch reference: %w", err)
+			}
+			currentRef = head
+		}
+	}
+
+	// Get reference for the main branch
+	mainRefName := plumbing.NewBranchReferenceName(mainBranch)
+	mainRef, err := g.repo.Reference(mainRefName, true)
+
+	if err != nil {
+		remoteBranchRefName := plumbing.NewRemoteReferenceName("origin", mainBranch)
+		mainRef, err = g.repo.Reference(remoteBranchRefName, true)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get %s branch reference (tried both local and remote): %w", mainBranch, err)
+		}
+	}
+
+	// Find merge base (common ancestor)
+	mergeBase, err := g.findMergeBase(currentRef.Hash(), mainRef.Hash())
+	if err != nil {
+		return 0, fmt.Errorf("failed to find merge base: %w", err)
+	}
+
+	// Count commits from main branch HEAD back to merge base
+	count := 0
+	commitIter, err := g.repo.Log(&git.LogOptions{From: mainRef.Hash()})
+	if err != nil {
+		return 0, fmt.Errorf("failed to get commit log: %w", err)
+	}
+
+	err = commitIter.ForEach(func(c *object.Commit) error {
+		if c.Hash == mergeBase {
+			return storer.ErrStop
+		}
+		count++
+		return nil
+	})
+	if err != nil && err != storer.ErrStop {
+		return 0, fmt.Errorf("failed to count commits on main since branch point: %w", err)
+	}
+
+	return count, nil
+}
+
 // GetTagOnCurrentCommit returns the tag on the current HEAD commit, if any
 func (g *Repo) GetTagOnCurrentCommit() (string, error) {
 	head, err := g.repo.Head()

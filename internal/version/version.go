@@ -288,15 +288,23 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 		}
 	} else {
 		// On feature branch: version is BASE.X-branchname.Y
-		// X is the next patch version
+		// X is the next patch version (base + 1 + commits on main since branching)
 		// Y is the number of commits on this branch since branching
 		log("On feature branch '%s', calculating prerelease version...", currentBranch)
 
-		// Use main branch commit count to determine next patch version
+		// Calculate how many commits have been added to main since this branch diverged
+		mainCommitsSinceBranch, err := repo.GetMainBranchCommitsSinceBranchPoint(mainBranch, currentBranch)
+		if err != nil {
+			return "", fmt.Errorf("failed to get main branch commits since branch point: %w", err)
+		}
+		log("Commits on main branch since branching: %d", mainCommitsSinceBranch)
+
+		// Calculate patch version: base + 1 (for the next version) + commits on main since branching
 		if useTagAsBase {
-			// The next version after the tag, considering main branch commits
-			version.Patch = baseVersion.Patch + mainCommitCount
+			// Start with the next patch after the tag, then add commits on main since branching
+			version.Patch = baseVersion.Patch + 1 + mainCommitsSinceBranch
 		} else {
+			// No tag base, use commit count (this maintains backward compatibility)
 			version.Patch = mainCommitCount
 		}
 
