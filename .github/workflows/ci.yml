@@ -119,7 +119,7 @@ jobs:
           fi
 
           # Build the binary
-          go build -ldflags="-s -w -X main.version=${{ needs.get-version.outputs.version }}" \
+          go build -ldflags="-s -w -X main.Version=${{ needs.get-version.outputs.version }}" \
             -o "${BINARY_NAME}" \
             ./cmd/autoversion
 
