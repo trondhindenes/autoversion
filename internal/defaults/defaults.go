@@ -7,11 +7,15 @@ const (
 	PrereleaseID   = "pre"   // Prerelease identifier for prerelease versions
 
 	// Branch-related defaults
-	MainBranchBehavior   = "release" // Default behavior for main branch: "release" or "pre"
-	UnknownBranchName    = "unknown" // Fallback name for sanitized branches that become empty
-	DefaultTagPrefix     = ""        // Default tag prefix (empty = no prefix)
-	DefaultVersionPrefix = ""        // Default version prefix (empty = no prefix)
-	DefaultUseCIBranch   = true      // Whether to detect branch from CI environment variables
+	MainBranchBehavior       = "release" // Default behavior for main branch: "release" or "pre"
+	UnknownBranchName        = "unknown" // Fallback name for sanitized branches that become empty
+	DefaultTagPrefix         = ""        // Default tag prefix (empty = no prefix)
+	DefaultVersionPrefix     = ""        // Default version prefix (empty = no prefix)
+	DefaultUseCIBranch       = true      // Whether to detect branch from CI environment variables
+	DefaultFailOnOutdated    = false     // Whether to fail (vs warn) when feature branch base is outdated
+	DefaultOutdatedCheckMode = "tagged"  // Default mode for outdated base check: "tagged" or "all"
+	OutdatedCheckModeTagged  = "tagged"  // Check mode: only warn on new tags
+	OutdatedCheckModeAll     = "all"     // Check mode: warn on any new commits
 )
 
 // Branch name prefixes that are automatically stripped during sanitization
@@ -27,6 +31,9 @@ var MainBranches = []string{"main", "master"}
 
 // ValidMainBranchBehaviors are the allowed values for main branch behavior
 var ValidMainBranchBehaviors = []string{"release", "pre"}
+
+// ValidOutdatedCheckModes are the allowed values for outdated base check mode
+var ValidOutdatedCheckModes = []string{OutdatedCheckModeTagged, OutdatedCheckModeAll}
 
 // CIProvider represents configuration for a specific CI provider
 type CIProvider struct {

@@ -360,6 +360,158 @@ func (g *Repo) GetMainBranchCommitsSinceBranchPoint(mainBranch, currentBranch st
 	return count, nil
 }
 
+// CheckMainBranchHasNewTagsSinceBranchPoint checks if main branch has been tagged
+// after the current branch diverged from it. Returns true if main has new tags,
+// along with the most recent tag name on main if found.
+func (g *Repo) CheckMainBranchHasNewTagsSinceBranchPoint(mainBranch, currentBranch string) (bool, string, error) {
+	if currentBranch == mainBranch {
+		return false, "", nil
+	}
+
+	// Get reference for the current branch
+	currentBranchRefName := plumbing.NewBranchReferenceName(currentBranch)
+	currentRef, err := g.repo.Reference(currentBranchRefName, true)
+
+	if err != nil {
+		// Local branch doesn't exist, try remote branch
+		remoteBranchRefName := plumbing.NewRemoteReferenceName("origin", currentBranch)
+		currentRef, err = g.repo.Reference(remoteBranchRefName, true)
+		if err != nil {
+			// If we can't find the branch reference, fall back to HEAD
+			head, err := g.repo.Head()
+			if err != nil {
+				return false, "", fmt.Errorf("failed to get HEAD and couldn't find branch reference: %w", err)
+			}
+			currentRef = head
+		}
+	}
+
+	// Get reference for the main branch
+	mainRefName := plumbing.NewBranchReferenceName(mainBranch)
+	mainRef, err := g.repo.Reference(mainRefName, true)
+
+	if err != nil {
+		remoteBranchRefName := plumbing.NewRemoteReferenceName("origin", mainBranch)
+		mainRef, err = g.repo.Reference(remoteBranchRefName, true)
+		if err != nil {
+			return false, "", fmt.Errorf("failed to get %s branch reference (tried both local and remote): %w", mainBranch, err)
+		}
+	}
+
+	// Find merge base (common ancestor)
+	mergeBase, err := g.findMergeBase(currentRef.Hash(), mainRef.Hash())
+	if err != nil {
+		return false, "", fmt.Errorf("failed to find merge base: %w", err)
+	}
+
+	// Get all tags
+	tagRefs, err := g.repo.Tags()
+	if err != nil {
+		return false, "", fmt.Errorf("failed to get tags: %w", err)
+	}
+
+	// Build a map of commit hash to tag name
+	tagMap := make(map[plumbing.Hash]string)
+	err = tagRefs.ForEach(func(ref *plumbing.Reference) error {
+		tagMap[ref.Hash()] = ref.Name().Short()
+
+		// Also check annotated tags
+		tag, err := g.repo.TagObject(ref.Hash())
+		if err == nil {
+			tagMap[tag.Target] = ref.Name().Short()
+		}
+
+		return nil
+	})
+	if err != nil {
+		return false, "", fmt.Errorf("failed to iterate tags: %w", err)
+	}
+
+	// Walk the main branch history from its HEAD to the merge base
+	// and check if there are any tags in between
+	commitIter, err := g.repo.Log(&git.LogOptions{From: mainRef.Hash()})
+	if err != nil {
+		return false, "", fmt.Errorf("failed to get commit log: %w", err)
+	}
+
+	var foundTag string
+	foundNewTag := false
+	err = commitIter.ForEach(func(c *object.Commit) error {
+		// Stop when we reach the merge base
+		if c.Hash == mergeBase {
+			return storer.ErrStop
+		}
+
+		// Check if this commit has a tag
+		if tagName, exists := tagMap[c.Hash]; exists {
+			if foundTag == "" {
+				foundTag = tagName // Remember the most recent tag
+			}
+			foundNewTag = true
+		}
+
+		return nil
+	})
+	if err != nil && err != storer.ErrStop {
+		return false, "", fmt.Errorf("failed to iterate commits on main since branch point: %w", err)
+	}
+
+	return foundNewTag, foundTag, nil
+}
+
+// CheckMainBranchHasNewCommitsSinceBranchPoint checks if main branch has any new commits
+// after the current branch diverged from it. Returns true if main has moved forward since the
+// branch point. This is useful for detecting if a feature branch is outdated regardless of tags.
+func (g *Repo) CheckMainBranchHasNewCommitsSinceBranchPoint(mainBranch, currentBranch string) (bool, error) {
+	if currentBranch == mainBranch {
+		return false, nil
+	}
+
+	// Get reference for the current branch
+	currentBranchRefName := plumbing.NewBranchReferenceName(currentBranch)
+	currentRef, err := g.repo.Reference(currentBranchRefName, true)
+
+	if err != nil {
+		// Local branch doesn't exist, try remote branch
+		remoteBranchRefName := plumbing.NewRemoteReferenceName("origin", currentBranch)
+		currentRef, err = g.repo.Reference(remoteBranchRefName, true)
+		if err != nil {
+			// If we can't find the branch reference, fall back to HEAD
+			head, err := g.repo.Head()
+			if err != nil {
+				return false, fmt.Errorf("failed to get HEAD and couldn't find branch reference: %w", err)
+			}
+			currentRef = head
+		}
+	}
+
+	// Get reference for the main branch
+	mainRefName := plumbing.NewBranchReferenceName(mainBranch)
+	mainRef, err := g.repo.Reference(mainRefName, true)
+
+	if err != nil {
+		remoteBranchRefName := plumbing.NewRemoteReferenceName("origin", mainBranch)
+		mainRef, err = g.repo.Reference(remoteBranchRefName, true)
+		if err != nil {
+			return false, fmt.Errorf("failed to get %s branch reference (tried both local and remote): %w", mainBranch, err)
+		}
+	}
+
+	// Find merge base (common ancestor)
+	mergeBase, err := g.findMergeBase(currentRef.Hash(), mainRef.Hash())
+	if err != nil {
+		return false, fmt.Errorf("failed to find merge base: %w", err)
+	}
+
+	// If the main branch HEAD is the same as the merge base, there are no new commits
+	if mainRef.Hash() == mergeBase {
+		return false, nil
+	}
+
+	// Main branch has moved forward since the branch point
+	return true, nil
+}
+
 // GetTagOnCurrentCommit returns the tag on the current HEAD commit, if any
 func (g *Repo) GetTagOnCurrentCommit() (string, error) {
 	head, err := g.repo.Head()

@@ -299,6 +299,67 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 		}
 		log("Commits on main branch since branching: %d", mainCommitsSinceBranch)
 
+		// Determine the outdated check mode
+		outdatedCheckMode := defaults.DefaultOutdatedCheckMode
+		if cfg.OutdatedBaseCheckMode != nil && *cfg.OutdatedBaseCheckMode != "" {
+			outdatedCheckMode = *cfg.OutdatedBaseCheckMode
+			log("Using configured outdated base check mode: %s", outdatedCheckMode)
+		} else {
+			log("Using default outdated base check mode: %s", outdatedCheckMode)
+		}
+
+		// Validate outdated check mode
+		validCheckMode := false
+		for _, valid := range defaults.ValidOutdatedCheckModes {
+			if outdatedCheckMode == valid {
+				validCheckMode = true
+				break
+			}
+		}
+		if !validCheckMode {
+			return "", fmt.Errorf("invalid outdatedBaseCheckMode '%s': must be one of %v", outdatedCheckMode, defaults.ValidOutdatedCheckModes)
+		}
+
+		// Check for outdated base based on the configured mode
+		var isOutdated bool
+		var outdatedReason string
+
+		if outdatedCheckMode == defaults.OutdatedCheckModeTagged {
+			// Check only for new tags
+			hasNewTags, newTag, err := repo.CheckMainBranchHasNewTagsSinceBranchPoint(mainBranch, currentBranch)
+			if err != nil {
+				// Don't fail on this check, just log the error
+				log("Warning: failed to check for new tags on main branch: %v", err)
+			} else if hasNewTags {
+				isOutdated = true
+				outdatedReason = fmt.Sprintf("new tag(s) since this branch diverged (most recent: %s)", newTag)
+			}
+		} else if outdatedCheckMode == defaults.OutdatedCheckModeAll {
+			// Check for any new commits
+			hasNewCommits, err := repo.CheckMainBranchHasNewCommitsSinceBranchPoint(mainBranch, currentBranch)
+			if err != nil {
+				// Don't fail on this check, just log the error
+				log("Warning: failed to check for new commits on main branch: %v", err)
+			} else if hasNewCommits {
+				isOutdated = true
+				outdatedReason = fmt.Sprintf("%d new commit(s) since this branch diverged", mainCommitsSinceBranch)
+			}
+		}
+
+		// Handle outdated base if detected
+		if isOutdated {
+			// Determine if we should fail or just warn
+			failOnOutdated := cfg.FailOnOutdatedBase != nil && *cfg.FailOnOutdatedBase
+
+			if failOnOutdated {
+				return "", fmt.Errorf("the '%s' branch has %s. This branch is calculating versions based on an outdated '%s' branch. Rebase or merge from '%s' to continue", mainBranch, outdatedReason, mainBranch, mainBranch)
+			} else {
+				log("WARNING: The '%s' branch has %s.", mainBranch, outdatedReason)
+				log("         This branch is calculating versions based on an outdated '%s' branch.", mainBranch)
+				log("         Consider rebasing or merging from '%s' to get accurate version calculations.", mainBranch)
+			}
+		}
+
 		// Calculate patch version: base + 1 (for the next version) + commits on main since branching
 		if useTagAsBase {
 			// Start with the next patch after the tag, then add commits on main since branching
