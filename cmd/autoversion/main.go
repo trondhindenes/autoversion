@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -13,9 +15,10 @@ import (
 
 var (
 	// Version is set at build time via -ldflags
-	Version = "0.0.1-dev"
-	cfgFile string
-	rootCmd = &cobra.Command{
+	Version    = "0.0.1-dev"
+	cfgFile    string
+	configFlag []string
+	rootCmd    = &cobra.Command{
 		Use:   "autoversion",
 		Short: "Automatically generate semantic versions based on git repository state",
 		Long: `autoversion is a CLI tool that generates semantic versions based on the state of a git repository.
@@ -39,6 +42,7 @@ It calculates versions for the main branch (e.g., 1.0.0, 1.0.1) and prerelease v
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .autoversion.yaml)")
+	rootCmd.PersistentFlags().StringArrayVar(&configFlag, "config-flag", []string{}, "override config setting (format: key=value, can be used multiple times)")
 	rootCmd.AddCommand(schemaCmd)
 	rootCmd.AddCommand(versionCmd)
 }
@@ -47,9 +51,32 @@ func initConfig() {
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
 	} else {
-		viper.AddConfigPath(".")
-		viper.SetConfigName(".autoversion")
-		viper.SetConfigType("yaml")
+		// Try to find config files with various case and extension combinations
+		configVariants := []string{
+			".autoversion.yaml",
+			".autoversion.yml",
+			".Autoversion.yaml",
+			".Autoversion.yml",
+			".AUTOVERSION.yaml",
+			".AUTOVERSION.yml",
+		}
+
+		var foundConfig string
+		for _, variant := range configVariants {
+			if _, err := os.Stat(variant); err == nil {
+				foundConfig = variant
+				break
+			}
+		}
+
+		if foundConfig != "" {
+			viper.SetConfigFile(foundConfig)
+		} else {
+			// Fallback to viper's default behavior
+			viper.AddConfigPath(".")
+			viper.SetConfigName(".autoversion")
+			viper.SetConfigType("yaml")
+		}
 	}
 
 	viper.SetDefault("mainBranches", defaults.MainBranches)
@@ -58,9 +85,37 @@ func initConfig() {
 	viper.SetDefault("versionPrefix", defaults.DefaultVersionPrefix)
 	viper.SetDefault("initialVersion", defaults.InitialVersion)
 	viper.SetDefault("useCIBranch", defaults.DefaultUseCIBranch)
+	viper.SetDefault("failOnOutdatedBase", defaults.DefaultFailOnOutdated)
+	viper.SetDefault("outdatedBaseCheckMode", defaults.DefaultOutdatedCheckMode)
 
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+	}
+
+	// Process command-line config overrides
+	for _, override := range configFlag {
+		parts := strings.SplitN(override, "=", 2)
+		if len(parts) != 2 {
+			fmt.Fprintf(os.Stderr, "Warning: ignoring invalid config-flag format '%s' (expected key=value)\n", override)
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		// Try to parse as boolean
+		if boolVal, err := strconv.ParseBool(value); err == nil {
+			viper.Set(key, boolVal)
+			continue
+		}
+
+		// Try to parse as int
+		if intVal, err := strconv.Atoi(value); err == nil {
+			viper.Set(key, intVal)
+			continue
+		}
+
+		// Treat as string
+		viper.Set(key, value)
 	}
 }
 
@@ -103,6 +158,16 @@ func run(cmd *cobra.Command, args []string) {
 	if viper.IsSet("useCIBranch") {
 		useCIBranch := viper.GetBool("useCIBranch")
 		cfg.UseCIBranch = &useCIBranch
+	}
+
+	if viper.IsSet("failOnOutdatedBase") {
+		failOnOutdatedBase := viper.GetBool("failOnOutdatedBase")
+		cfg.FailOnOutdatedBase = &failOnOutdatedBase
+	}
+
+	if viper.IsSet("outdatedBaseCheckMode") {
+		outdatedBaseCheckMode := viper.GetString("outdatedBaseCheckMode")
+		cfg.OutdatedBaseCheckMode = &outdatedBaseCheckMode
 	}
 
 	ver, err := version.CalculateWithConfig(cfg)
