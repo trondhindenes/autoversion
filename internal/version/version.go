@@ -186,8 +186,16 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 
 	var baseVersion Version
 	var useTagAsBase bool
+	var tagNotInBranchHistory bool
 	if mostRecentTag != "" {
-		log("Found most recent tag in history: %s (%d commits ago)", mostRecentTag, commitsSinceTag)
+		// commitsSinceTag can be -1 if the tag is not in current branch's history
+		if commitsSinceTag == -1 {
+			log("Found most recent tag in repository: %s (not in current branch history)", mostRecentTag)
+			tagNotInBranchHistory = true
+		} else {
+			log("Found most recent tag in history: %s (%d commits ago)", mostRecentTag, commitsSinceTag)
+			tagNotInBranchHistory = false
+		}
 
 		// Strip prefix and validate
 		strippedTag := git.StripTagPrefix(mostRecentTag, tagPrefix)
@@ -214,12 +222,19 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 				log("Using tag '%s' as base version", strippedTag)
 				baseVersion = parsedVersion
 				useTagAsBase = true
+				// If tag is not in current branch's history, treat it as if we're 0 commits away
+				// This allows feature branches to use the latest tag from main as their base
+				if commitsSinceTag == -1 {
+					commitsSinceTag = 0
+					log("Tag is not in current branch history, using as base with 0 commits distance")
+				}
 			}
 		}
 	} else {
 		log("No tags found in commit history, using initial version %s", initialVersionStr)
 		baseVersion = initialVersion
 		useTagAsBase = false
+		tagNotInBranchHistory = false
 	}
 
 	// Get commit count on main branch
@@ -362,8 +377,15 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 
 		// Calculate patch version: base + 1 (for the next version) + commits on main since branching
 		if useTagAsBase {
-			// Start with the next patch after the tag, then add commits on main since branching
-			version.Patch = baseVersion.Patch + 1 + mainCommitsSinceBranch
+			// Start with the next patch after the tag
+			version.Patch = baseVersion.Patch + 1
+
+			// Only add mainCommitsSinceBranch if the tag IS in the branch history
+			// If the tag is NOT in branch history (e.g., added to main after branch diverged),
+			// we don't add mainCommitsSinceBranch because the tag already represents the latest version
+			if !tagNotInBranchHistory {
+				version.Patch += mainCommitsSinceBranch
+			}
 		} else {
 			// No tag base, use commit count (this maintains backward compatibility)
 			version.Patch = mainCommitCount

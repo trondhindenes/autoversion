@@ -554,29 +554,51 @@ func (g *Repo) GetTagOnCurrentCommit() (string, error) {
 	return foundTag, nil
 }
 
-// GetMostRecentTag returns the most recent tag in the commit history (walking back from HEAD)
-// Returns the tag name and the number of commits since that tag
+// GetMostRecentTag returns the most recent tag in the repository
+// It considers all tags in the entire repository, not just those reachable from HEAD
+// Returns the tag name and commits since that tag (-1 if tag is not in current branch history)
 func (g *Repo) GetMostRecentTag() (string, int, error) {
 	head, err := g.repo.Head()
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to get HEAD: %w", err)
 	}
 
-	// Get all tags
+	// Get all tags and build a map of commit hash to tag info
 	tagRefs, err := g.repo.Tags()
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to get tags: %w", err)
 	}
 
-	// Build a map of commit hash to tag name
-	tagMap := make(map[plumbing.Hash]string)
+	type tagInfo struct {
+		name   string
+		hash   plumbing.Hash
+		commit *object.Commit
+	}
+
+	var tags []tagInfo
+
 	err = tagRefs.ForEach(func(ref *plumbing.Reference) error {
-		tagMap[ref.Hash()] = ref.Name().Short()
+		// Handle lightweight tags
+		commit, err := g.repo.CommitObject(ref.Hash())
+		if err == nil {
+			tags = append(tags, tagInfo{
+				name:   ref.Name().Short(),
+				hash:   ref.Hash(),
+				commit: commit,
+			})
+		}
 
 		// Also check annotated tags
 		tag, err := g.repo.TagObject(ref.Hash())
 		if err == nil {
-			tagMap[tag.Target] = ref.Name().Short()
+			commit, err := g.repo.CommitObject(tag.Target)
+			if err == nil {
+				tags = append(tags, tagInfo{
+					name:   ref.Name().Short(),
+					hash:   tag.Target,
+					commit: commit,
+				})
+			}
 		}
 
 		return nil
@@ -585,28 +607,47 @@ func (g *Repo) GetMostRecentTag() (string, int, error) {
 		return "", 0, fmt.Errorf("failed to iterate tags: %w", err)
 	}
 
-	// Walk the commit history from HEAD
+	if len(tags) == 0 {
+		return "", 0, nil
+	}
+
+	// Find the most recent tag by commit date (regardless of reachability)
+	var mostRecentTag *tagInfo
+	for i := range tags {
+		if mostRecentTag == nil || tags[i].commit.Committer.When.After(mostRecentTag.commit.Committer.When) {
+			mostRecentTag = &tags[i]
+		}
+	}
+
+	if mostRecentTag == nil {
+		return "", 0, nil
+	}
+
+	// Now calculate distance from HEAD to this tag (if reachable)
+	// Build a map of all commits reachable from HEAD
+	reachableCommits := make(map[plumbing.Hash]int)
 	commitIter, err := g.repo.Log(&git.LogOptions{From: head.Hash()})
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to get commit log: %w", err)
 	}
 
-	commitsSinceTag := 0
-	var foundTag string
+	commitDistance := 0
 	err = commitIter.ForEach(func(c *object.Commit) error {
-		if tagName, exists := tagMap[c.Hash]; exists {
-			foundTag = tagName
-			return storer.ErrStop
-		}
-		commitsSinceTag++
+		reachableCommits[c.Hash] = commitDistance
+		commitDistance++
 		return nil
 	})
-
-	if err != nil && err != storer.ErrStop {
+	if err != nil {
 		return "", 0, fmt.Errorf("failed to iterate commits: %w", err)
 	}
 
-	return foundTag, commitsSinceTag, nil
+	// Check if the most recent tag is reachable from HEAD
+	if distance, reachable := reachableCommits[mostRecentTag.hash]; reachable {
+		return mostRecentTag.name, distance, nil
+	}
+
+	// Tag is not in current branch's history, return -1 as distance
+	return mostRecentTag.name, -1, nil
 }
 
 // StripTagPrefix removes the configured prefix from a tag name
