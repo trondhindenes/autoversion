@@ -51,28 +51,24 @@ func initConfig() {
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Try to find config files with various case and extension combinations
-		configVariants := []string{
-			".autoversion.yaml",
-			".autoversion.yml",
-			".Autoversion.yaml",
-			".Autoversion.yml",
-			".AUTOVERSION.yaml",
-			".AUTOVERSION.yml",
-		}
-
-		var foundConfig string
-		for _, variant := range configVariants {
-			if _, err := os.Stat(variant); err == nil {
-				foundConfig = variant
-				break
+		// List all files in current directory and find config file
+		entries, err := os.ReadDir(".")
+		if err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				filename := entry.Name()
+				lowerFilename := strings.ToLower(filename)
+				if lowerFilename == ".autoversion.yaml" || lowerFilename == ".autoversion.yml" {
+					viper.SetConfigFile(filename)
+					break
+				}
 			}
 		}
 
-		if foundConfig != "" {
-			viper.SetConfigFile(foundConfig)
-		} else {
-			// Fallback to viper's default behavior
+		// If no config file found, fallback to viper's default behavior
+		if viper.ConfigFileUsed() == "" {
 			viper.AddConfigPath(".")
 			viper.SetConfigName(".autoversion")
 			viper.SetConfigType("yaml")
