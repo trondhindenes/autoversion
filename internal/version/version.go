@@ -90,9 +90,14 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 			// Continue with normal version calculation
 		} else {
 			log("Using tag as version: %s", version)
-			result := applyVersionPrefix(version, cfg)
-			if result != version {
-				log("Applied version prefix: %s -> %s", version, result)
+			// Apply mode conversion first, then prefix
+			modeVersion, err := applyVersionMode(version, cfg)
+			if err != nil {
+				return "", fmt.Errorf("failed to apply version mode: %w", err)
+			}
+			result := applyVersionPrefix(modeVersion, cfg)
+			if result != modeVersion {
+				log("Applied version prefix: %s -> %s", modeVersion, result)
 			}
 			return result, nil
 		}
@@ -406,9 +411,14 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 		log("Calculated prerelease version: %s", version.String())
 	}
 
-	result := applyVersionPrefix(version.String(), cfg)
-	if result != version.String() {
-		log("Applied version prefix: %s -> %s", version.String(), result)
+	// Apply mode conversion first, then prefix
+	modeVersion, err := applyVersionMode(version.String(), cfg)
+	if err != nil {
+		return "", fmt.Errorf("failed to apply version mode: %w", err)
+	}
+	result := applyVersionPrefix(modeVersion, cfg)
+	if result != modeVersion {
+		log("Applied version prefix: %s -> %s", modeVersion, result)
 	}
 	log("Final version: %s", result)
 	return result, nil
@@ -420,6 +430,47 @@ func applyVersionPrefix(version string, cfg *config.Config) string {
 		return *cfg.VersionPrefix + version
 	}
 	return version
+}
+
+// applyVersionMode converts the version to the configured mode format
+func applyVersionMode(version string, cfg *config.Config) (string, error) {
+	mode := defaults.DefaultMode
+	if cfg.Mode != nil && *cfg.Mode != "" {
+		mode = *cfg.Mode
+		log("Using configured version mode: %s", mode)
+	} else {
+		log("Using default version mode: %s", mode)
+	}
+
+	// Validate mode
+	validMode := false
+	for _, valid := range defaults.ValidModes {
+		if mode == valid {
+			validMode = true
+			break
+		}
+	}
+	if !validMode {
+		return "", fmt.Errorf("invalid mode '%s': must be one of %v", mode, defaults.ValidModes)
+	}
+
+	// Apply mode conversion
+	switch mode {
+	case defaults.ModePep440:
+		pep440Version, err := ConvertToPEP440(version)
+		if err != nil {
+			return "", fmt.Errorf("failed to convert to PEP 440: %w", err)
+		}
+		if pep440Version != version {
+			log("Converted to PEP 440 format: %s -> %s", version, pep440Version)
+		}
+		return pep440Version, nil
+	case defaults.ModeSemver:
+		// No conversion needed for semver
+		return version, nil
+	default:
+		return "", fmt.Errorf("unsupported mode: %s", mode)
+	}
 }
 
 // parseVersion parses a semver string into a Version struct

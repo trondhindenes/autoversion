@@ -3,8 +3,11 @@ package defaults
 // Application default values - single source of truth for all defaults
 const (
 	// Version-related defaults
-	InitialVersion = "1.0.0" // Initial version when no tags exist in repository
-	PrereleaseID   = "pre"   // Prerelease identifier for prerelease versions
+	InitialVersion = "1.0.0"  // Initial version when no tags exist in repository
+	PrereleaseID   = "pre"    // Prerelease identifier for prerelease versions
+	DefaultMode    = "semver" // Default version format mode: "semver" or "pep440"
+	ModeSemver     = "semver" // Semver mode constant
+	ModePep440     = "pep440" // PEP 440 mode constant
 
 	// Branch-related defaults
 	MainBranchBehavior       = "release" // Default behavior for main branch: "release" or "pre"
@@ -31,6 +34,9 @@ var MainBranches = []string{"main", "master"}
 
 // ValidMainBranchBehaviors are the allowed values for main branch behavior
 var ValidMainBranchBehaviors = []string{"release", "pre"}
+
+// ValidModes are the allowed values for version mode
+var ValidModes = []string{ModeSemver, ModePep440}
 
 // ValidOutdatedCheckModes are the allowed values for outdated base check mode
 var ValidOutdatedCheckModes = []string{OutdatedCheckModeTagged, OutdatedCheckModeAll}

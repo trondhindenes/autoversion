@@ -77,6 +77,7 @@ func initConfig() {
 
 	viper.SetDefault("mainBranches", defaults.MainBranches)
 	viper.SetDefault("mainBranchBehavior", defaults.MainBranchBehavior)
+	viper.SetDefault("mode", defaults.DefaultMode)
 	viper.SetDefault("tagPrefix", defaults.DefaultTagPrefix)
 	viper.SetDefault("versionPrefix", defaults.DefaultVersionPrefix)
 	viper.SetDefault("initialVersion", defaults.InitialVersion)
@@ -134,6 +135,11 @@ func run(cmd *cobra.Command, args []string) {
 	if viper.IsSet("mainBranchBehavior") {
 		behavior := viper.GetString("mainBranchBehavior")
 		cfg.MainBranchBehavior = &behavior
+	}
+
+	if viper.IsSet("mode") {
+		mode := viper.GetString("mode")
+		cfg.Mode = &mode
 	}
 
 	if viper.IsSet("tagPrefix") {
