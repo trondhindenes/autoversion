@@ -445,10 +445,12 @@ func testCustomInitialVersion(t *testing.T) {
 	defer os.Chdir(oldDir)
 
 	// Test with 0.0.1 as initial version
+	mode := "semver"
 	initialVersion := "0.0.1"
 	cfg := &config.Config{
 		MainBranch:     "main",
 		InitialVersion: &initialVersion,
+		Mode:           &mode,
 	}
 
 	// First commit should be 0.0.1
@@ -484,6 +486,7 @@ func testCustomInitialVersion(t *testing.T) {
 	cfg2 := &config.Config{
 		MainBranch:     "main",
 		InitialVersion: &initialVersion2,
+		Mode:           &mode,
 	}
 
 	// Should use 2.5.0 as base and increment (we have 3 commits, so 2.5.2)
@@ -520,6 +523,7 @@ func testCustomInitialVersion(t *testing.T) {
 	cfg3 := &config.Config{
 		MainBranch:     "main",
 		InitialVersion: &invalidVersion,
+		Mode:           &mode,
 	}
 	_, err = CalculateWithConfig(cfg3)
 	if err == nil {
@@ -529,9 +533,11 @@ func testCustomInitialVersion(t *testing.T) {
 	// Test feature branch with custom initial version
 	checkoutBranch(t, repo, "feature/test", true)
 	initialVersion3 := "0.1.0"
+	mode = "semver"
 	cfg4 := &config.Config{
 		MainBranch:     "main",
 		InitialVersion: &initialVersion3,
+		Mode:           &mode,
 	}
 
 	version, err = CalculateWithConfig(cfg4)
@@ -560,7 +566,10 @@ func testMasterBranchSupport(t *testing.T) {
 	defer os.Chdir(oldDir)
 
 	// Test with default config (should detect master branch automatically)
-	cfg := &config.Config{}
+	mode := "semver"
+	cfg := &config.Config{
+		Mode: &mode,
+	}
 	version, err := CalculateWithConfig(cfg)
 	if err != nil {
 		t.Fatalf("Failed to calculate version: %v", err)
@@ -582,6 +591,7 @@ func testMasterBranchSupport(t *testing.T) {
 	// Test with explicit mainBranches config
 	cfg2 := &config.Config{
 		MainBranches: []string{"main", "master"},
+		Mode:         &mode,
 	}
 	version, err = CalculateWithConfig(cfg2)
 	if err != nil {
@@ -608,8 +618,10 @@ func testMainBranchBehaviorPre(t *testing.T) {
 
 	// Test with mainBranchBehavior: pre
 	preBehavior := "pre"
+	mode := "semver"
 	cfg := &config.Config{
 		MainBranchBehavior: &preBehavior,
+		Mode:               &mode,
 	}
 
 	// First commit should be 1.0.0-pre.0
@@ -674,6 +686,7 @@ func testMainBranchBehaviorPre(t *testing.T) {
 	releaseBehavior := "release"
 	cfg2 := &config.Config{
 		MainBranchBehavior: &releaseBehavior,
+		Mode:               &mode,
 	}
 	version, err = CalculateWithConfig(cfg2)
 	if err != nil {
