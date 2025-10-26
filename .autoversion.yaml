@@ -6,6 +6,7 @@ mainBranch: main
 # Strip "v" prefix from git tags
 # This allows tags like "v1.0.0" to be read as "1.0.0"
 tagPrefix: "v"
+versionPrefix: "v"
 
 # Don't add prefix to output (pure semver)
 # The GitHub Actions workflow will add "v" when creating tags

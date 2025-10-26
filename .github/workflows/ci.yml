@@ -39,6 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.semverWithPrefix }}
+      versionWithPrefix: ${{ steps.get_version.outputs.semverWithPrefix }}
       is-release: ${{ steps.get_version.outputs.isRelease }}
     steps:
       - name: Checkout code
@@ -161,7 +162,7 @@ jobs:
 
       - name: Create and push tag
         run: |
-          VERSION="v${{ needs.get-version.outputs.version }}"
+          VERSION="${{ needs.get-version.outputs.versionWithPrefix }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${VERSION}" -m "Release ${VERSION}"
@@ -178,7 +179,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ needs.get-version.outputs.version }}
+          tag_name: ${{ needs.get-version.outputs.versionWithPrefix }}
           draft: false
           prerelease: false
           generate_release_notes: true
