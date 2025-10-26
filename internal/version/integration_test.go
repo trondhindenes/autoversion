@@ -312,9 +312,11 @@ func testCIBranchDetection(t *testing.T) {
 	defer os.Unsetenv("GITHUB_HEAD_REF")
 
 	// Calculate version with CI branch detection enabled
+	mode := "semver"
 	cfg := &config.Config{
 		MainBranch:  "main",
 		UseCIBranch: boolPtr(true),
+		Mode:        &mode,
 	}
 
 	// Change to repo directory
@@ -771,8 +773,14 @@ func calculateVersionInRepo(repoPath, mainBranch, tagPrefix string) (string, err
 	}
 	defer os.Chdir(oldDir)
 
+	mode := "semver"
 	// Calculate version
-	return Calculate(mainBranch, tagPrefix)
+	cfg := &config.Config{
+		MainBranch: mainBranch,
+		TagPrefix:  &tagPrefix,
+		Mode:       &mode,
+	}
+	return CalculateWithConfig(cfg)
 }
 
 func boolPtr(b bool) *bool {
