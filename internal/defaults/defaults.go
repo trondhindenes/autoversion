@@ -5,7 +5,8 @@ const (
 	// Version-related defaults
 	InitialVersion = "1.0.0"  // Initial version when no tags exist in repository
 	PrereleaseID   = "pre"    // Prerelease identifier for prerelease versions
-	DefaultMode    = "semver" // Default version format mode: "semver" or "pep440"
+	DefaultMode    = "json"   // Default version format mode: "json", "semver" or "pep440"
+	ModeJson       = "json"   // JSON mode constant
 	ModeSemver     = "semver" // Semver mode constant
 	ModePep440     = "pep440" // PEP 440 mode constant
 
@@ -36,7 +37,7 @@ var MainBranches = []string{"main", "master"}
 var ValidMainBranchBehaviors = []string{"release", "pre"}
 
 // ValidModes are the allowed values for version mode
-var ValidModes = []string{ModeSemver, ModePep440}
+var ValidModes = []string{ModeJson, ModeSemver, ModePep440}
 
 // ValidOutdatedCheckModes are the allowed values for outdated base check mode
 var ValidOutdatedCheckModes = []string{OutdatedCheckModeTagged, OutdatedCheckModeAll}

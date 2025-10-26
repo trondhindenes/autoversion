@@ -25,6 +25,19 @@ A Go-based CLI tool that automatically generates semantic versions based on the 
 
 ## Installation
 
+## Homebrew (macos only)
+```
+brew tap trondhindenes/autoversion
+brew install autoversion
+```
+
+## Linux
+We recommend using the excellent "bin" package manager (https://github.com/marcosnils/bin).
+With that installed you can simply run:
+```shell
+bin install github.com/trondhindenes/autoversion
+```
+
 ### GitHub Action (Recommended for CI/CD)
 
 The easiest way to use autoversion in GitHub Actions:
@@ -42,8 +55,6 @@ See [GitHub Action documentation](https://github.com/trondhindenes/autoversion-a
 
 ### Docker
 
-The easiest way to use autoversion is via Docker:
-
 ```bash
 # Run in current directory
 docker run --rm -v "$(pwd):/repo" ghcr.io/trondhindenes/autoversion:latest
@@ -57,7 +68,7 @@ docker run --rm ghcr.io/trondhindenes/autoversion:latest schema
 
 **Available tags:**
 - `latest` - Latest stable release
-- `v1`, `v1.0`, `v1.0.13` - Specific versions with semver precision
+- `v1.0.47` - Specific versions with semver precision
 
 ### Download Pre-built Binaries
 
@@ -100,11 +111,27 @@ The binary will be placed in the `bin/` directory.
 
 ### Basic Usage
 
-Run autoversion in a git repository to get the current version:
+
 
 ```bash
 autoversion
 ```
+
+Autoversion's output defaults to "json" mode, which will output a JSON object with the version, like (this example assumes that versionPrefix is set o "v"):
+```json
+  {
+      "semver": "3.0.4",
+      "semverWithPrefix": "v3.0.4",
+      "pep440": "3.0.4",
+      "pep440WithPrefix": "v3.0.4",
+      "major": 3,
+      "minor": 0,
+      "patch": 4,
+      "isRelease": true
+  }
+```
+You can also set it to "semver" or "pep440" mode to get a pure semver or PEP 440 version respectively. In these modes, the `versionPrefix` is added to the calculated version.
+
 
 This will output a semantic version like:
 - `1.0.0` - First commit on main branch
@@ -121,10 +148,13 @@ Create an optional configuration file named `.autoversion.yaml` or `.autoversion
 ```yaml
 mainBranches: ["main", "master"]  # Default: ["main", "master"]
 mainBranchBehavior: "release"     # Default: "release" - or "pre" for prerelease versions
+mode: "json"                      # Default: "json" - or "semver" or "pep440"
 tagPrefix: "v"                    # Default: "" (no stripping) - strips "v" from tags
-versionPrefix: ""                 # Default: "" - set to "v" to output v1.0.0
+versionPrefix: ""                 # Default: "" - set to "v" to add prefix to output
 initialVersion: "1.0.0"           # Default: "1.0.0" - version to use when no tags exist
-useCIBranch: true                # Default: true - automatically detects branch in CI/CD environments
+useCIBranch: true                 # Default: true - automatically detects branch in CI/CD environments
+failOnOutdatedBase: false         # Default: false - set to true to fail instead of warn
+outdatedBaseCheckMode: "tagged"   # Default: "tagged" - or "all" to check all commits
 ```
 
 **JSON Example:**
@@ -132,8 +162,11 @@ useCIBranch: true                # Default: true - automatically detects branch 
 {
   "mainBranches": ["main", "master"],
   "mainBranchBehavior": "pre",
+  "mode": "semver",
   "tagPrefix": "PRODUCT/",
-  "versionPrefix": ""
+  "versionPrefix": "v",
+  "failOnOutdatedBase": true,
+  "outdatedBaseCheckMode": "all"
 }
 ```
 
@@ -143,6 +176,12 @@ You can specify a custom configuration file path:
 
 ```bash
 autoversion --config /path/to/config.yaml
+```
+
+### Specify config inline
+You can also specify the configuration inline:
+```bash
+autoversion --set-config "tagPrefix=v" --set-config "mainBranchBehavior=pre"
 ```
 
 ### Generate Configuration Schema
@@ -218,10 +257,13 @@ All configuration options are optional. If not specified, the defaults shown bel
 | `mainBranches` | array | `["main", "master"]` | List of branch names to treat as main branches. The first matching branch found in the repository is used |
 | `mainBranchBehavior` | string | `"release"` | Behavior for non-tagged commits on main branch: `"release"` creates release versions (`1.0.0`, `1.0.1`) or `"pre"` creates prerelease versions (`1.0.0-pre.0`, `1.0.0-pre.1`). Tagged commits always create release versions |
 | `mainBranch` | string | (deprecated) | Deprecated: Use `mainBranches` instead. Still supported for backward compatibility |
+| `mode` | string | `"json"` | Version output format mode: `"json"` (default) outputs JSON with all version formats, `"semver"` outputs standard semantic versioning, or `"pep440"` outputs Python PEP 440 compatible versions |
 | `tagPrefix` | string | `""` (empty) | Prefix to strip from git tags (e.g., `"v"` strips `v2.0.0` → `2.0.0`, `"PRODUCT/"` strips `PRODUCT/2.0.0` → `2.0.0`) |
-| `versionPrefix` | string | `""` (empty) | Prefix to add to the output version (e.g., `"v"` outputs `v1.0.0` instead of `1.0.0`) |
+| `versionPrefix` | string | `""` (empty) | Prefix to add to the output version (e.g., `"v"` outputs `v1.0.0` instead of `1.0.0`). In JSON mode, this is included in the `semverWithPrefix` and `pep440WithPrefix` fields |
 | `initialVersion` | string | `"1.0.0"` | The initial version to use when no tags exist in the repository (e.g., `"0.0.1"` or `"2.0.0"`). Must be valid semver |
-| `useCIBranch` | boolean | `false` | Enable CI branch detection (useful for PR builds where CI checks out a detached HEAD). Automatically detects GitHub Actions, GitLab CI, CircleCI, Travis CI, Jenkins, and Azure Pipelines |
+| `useCIBranch` | boolean | `true` | Enable CI branch detection (useful for PR builds where CI checks out a detached HEAD). Automatically detects GitHub Actions, GitLab CI, CircleCI, Travis CI, Jenkins, and Azure Pipelines |
+| `failOnOutdatedBase` | boolean | `false` | When running on a feature branch, if true and the main branch has been updated (based on `outdatedBaseCheckMode`) after this branch diverged, autoversion will exit with an error instead of just warning |
+| `outdatedBaseCheckMode` | string | `"tagged"` | Controls what triggers the outdated base warning/error on feature branches: `"tagged"` (default) only warns when main has new tags, or `"all"` warns when main has any new commits since branching |
 
 ### Configuration Examples
 
@@ -250,7 +292,20 @@ mainBranchBehavior: "pre"
 **Output version with 'v' prefix:**
 ```yaml
 # .autoversion.yaml
-versionPrefix: "v"  # Outputs v1.0.0 instead of 1.0.0
+versionPrefix: "v"  # In JSON mode: adds prefix to semverWithPrefix and pep440WithPrefix fields
+                    # In semver/pep440 modes: outputs v1.0.0 instead of 1.0.0
+```
+
+**Use semver mode instead of JSON:**
+```yaml
+# .autoversion.yaml
+mode: "semver"  # Outputs pure semver string: 1.0.0 instead of JSON
+```
+
+**Use PEP 440 mode for Python projects:**
+```yaml
+# .autoversion.yaml
+mode: "pep440"  # Outputs PEP 440 format: 3.0.4a0 for prereleases
 ```
 
 **Product with custom tag prefix:**
@@ -285,46 +340,63 @@ useCIBranch: true  # Enabled by default - detects actual branch from CI environm
 When you run `autoversion` without any configuration file:
 - Main branches are `main` or `master` (whichever exists, `main` preferred)
 - Main branch behavior is `release` mode (creates release versions)
+- Output mode is `json` (outputs JSON object with all version formats)
 - Git tags are used as-is (no prefix stripping)
-- Output is pure semver format (`1.0.0`, not `v1.0.0`)
+- Version prefix is empty (no prefix added to versions)
 - Initial version (when no tags exist) is `1.0.0`
-- Branch detection uses CI environment variables when available (GitHub Actions, GitLab CI, etc.), falls back to git's current branch
-- First commit on main outputs `1.0.0`
+- Branch detection uses CI environment variables (enabled by default) when available (GitHub Actions, GitLab CI, etc.), falls back to git's current branch
+- Outdated base check mode is `tagged` (warns only on new tags, not all commits)
+- Fail on outdated base is `false` (warnings only, not errors)
+- First commit on main outputs `{"semver":"1.0.0",...,"isRelease":true}`
 - Each subsequent commit increments patch version (`1.0.1`, `1.0.2`, etc.)
-- Feature branches output prerelease versions (`1.0.3-feature-name.0`)
+- Feature branches output prerelease versions (`1.0.3-feature-name.0` with `isRelease:false`)
 
 ## Examples
 
-### On main branch:
+### On main branch (default JSON mode):
 ```bash
 $ git checkout main
 $ autoversion
-1.0.5
+{"semver":"1.0.5","semverWithPrefix":"1.0.5","pep440":"1.0.5","pep440WithPrefix":"1.0.5","major":1,"minor":0,"patch":5,"isRelease":true}
 ```
 
-### On feature branch:
+### On feature branch (default JSON mode):
 ```bash
 $ git checkout -b feature/new-widget
 $ # make some commits
 $ autoversion
-1.0.6-new-widget.3
+{"semver":"1.0.6-new-widget.3","semverWithPrefix":"1.0.6-new-widget.3","pep440":"1.0.6a3","pep440WithPrefix":"1.0.6a3","major":1,"minor":0,"patch":6,"isRelease":false}
+```
+
+### Using semver mode:
+```bash
+$ autoversion --config-flag mode=semver
+1.0.5
 ```
 
 
-### With git tags:
+### With git tags (JSON mode):
 ```bash
-# Without any configuration (tag returned as-is)
+# Without any configuration (tag returned as-is in JSON)
 $ git tag -a v2.0.0 -m "Release 2.0.0"
 $ autoversion
-v2.0.0
+{"semver":"v2.0.0","semverWithPrefix":"v2.0.0","pep440":"v2.0.0","pep440WithPrefix":"v2.0.0","major":2,"minor":0,"patch":0,"isRelease":true}
 
 # With tagPrefix: "v" configured (strips the "v")
 $ autoversion
-2.0.0
+{"semver":"2.0.0","semverWithPrefix":"2.0.0","pep440":"2.0.0","pep440WithPrefix":"2.0.0","major":2,"minor":0,"patch":0,"isRelease":true}
 
 # With tagPrefix: "v" AND versionPrefix: "v" configured
 $ autoversion
-v2.0.0
+{"semver":"2.0.0","semverWithPrefix":"v2.0.0","pep440":"2.0.0","pep440WithPrefix":"v2.0.0","major":2,"minor":0,"patch":0,"isRelease":true}
+```
+
+### With git tags (semver mode):
+```bash
+# With mode: "semver" and tagPrefix: "v" configured
+$ git tag -a v2.0.0 -m "Release 2.0.0"
+$ autoversion --config-flag mode=semver --config-flag tagPrefix=v
+2.0.0
 ```
 
 ### With prerelease mode on main branch:
@@ -374,6 +446,7 @@ $ autoversion
   with:
     fetch-depth: 0  # Required: fetch full history for autoversion
 
+# Note that it's recommended to use the "official" github action instead of docker as shown below
 - name: Get version
   id: version
   run: |

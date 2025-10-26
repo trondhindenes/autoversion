@@ -1,6 +1,7 @@
 package version
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -11,6 +12,18 @@ import (
 	"github.com/trondhindenes/autoversion/internal/defaults"
 	"github.com/trondhindenes/autoversion/internal/git"
 )
+
+// VersionOutput represents the JSON output structure for version information
+type VersionOutput struct {
+	Semver           string `json:"semver"`
+	SemverWithPrefix string `json:"semverWithPrefix"`
+	Pep440           string `json:"pep440"`
+	Pep440WithPrefix string `json:"pep440WithPrefix"`
+	Major            int    `json:"major"`
+	Minor            int    `json:"minor"`
+	Patch            int    `json:"patch"`
+	IsRelease        bool   `json:"isRelease"`
+}
 
 // log writes a log message to stderr
 func log(format string, args ...interface{}) {
@@ -90,16 +103,24 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 			// Continue with normal version calculation
 		} else {
 			log("Using tag as version: %s", version)
-			// Apply mode conversion first, then prefix
+			// Apply mode conversion (which handles prefix internally for JSON mode)
 			modeVersion, err := applyVersionMode(version, cfg)
 			if err != nil {
 				return "", fmt.Errorf("failed to apply version mode: %w", err)
 			}
-			result := applyVersionPrefix(modeVersion, cfg)
-			if result != modeVersion {
-				log("Applied version prefix: %s -> %s", modeVersion, result)
+			// For non-JSON modes, apply prefix here
+			mode := defaults.DefaultMode
+			if cfg.Mode != nil && *cfg.Mode != "" {
+				mode = *cfg.Mode
 			}
-			return result, nil
+			if mode != defaults.ModeJson {
+				result := applyVersionPrefix(modeVersion, cfg)
+				if result != modeVersion {
+					log("Applied version prefix: %s -> %s", modeVersion, result)
+				}
+				return result, nil
+			}
+			return modeVersion, nil
 		}
 	} else {
 		log("No git tag found on current commit")
@@ -411,17 +432,26 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 		log("Calculated prerelease version: %s", version.String())
 	}
 
-	// Apply mode conversion first, then prefix
+	// Apply mode conversion (which handles prefix internally for JSON mode)
 	modeVersion, err := applyVersionMode(version.String(), cfg)
 	if err != nil {
 		return "", fmt.Errorf("failed to apply version mode: %w", err)
 	}
-	result := applyVersionPrefix(modeVersion, cfg)
-	if result != modeVersion {
-		log("Applied version prefix: %s -> %s", modeVersion, result)
+	// For non-JSON modes, apply prefix here
+	mode := defaults.DefaultMode
+	if cfg.Mode != nil && *cfg.Mode != "" {
+		mode = *cfg.Mode
 	}
-	log("Final version: %s", result)
-	return result, nil
+	if mode != defaults.ModeJson {
+		result := applyVersionPrefix(modeVersion, cfg)
+		if result != modeVersion {
+			log("Applied version prefix: %s -> %s", modeVersion, result)
+		}
+		log("Final version: %s", result)
+		return result, nil
+	}
+	log("Final version: %s", modeVersion)
+	return modeVersion, nil
 }
 
 // applyVersionPrefix adds the configured version prefix to the version string
@@ -456,6 +486,45 @@ func applyVersionMode(version string, cfg *config.Config) (string, error) {
 
 	// Apply mode conversion
 	switch mode {
+	case defaults.ModeJson:
+		// Convert to PEP 440 format
+		pep440Version, err := ConvertToPEP440(version)
+		if err != nil {
+			return "", fmt.Errorf("failed to convert to PEP 440: %w", err)
+		}
+
+		// Apply version prefix for the "WithPrefix" fields
+		semverWithPrefix := applyVersionPrefix(version, cfg)
+		pep440WithPrefix := applyVersionPrefix(pep440Version, cfg)
+
+		// A version is a release if it has no prerelease identifier
+		isRelease := !strings.Contains(version, "-")
+
+		// Parse version to extract major, minor, patch
+		parsedVersion, err := parseVersion(version)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse version for JSON output: %w", err)
+		}
+
+		output := VersionOutput{
+			Semver:           version,
+			SemverWithPrefix: semverWithPrefix,
+			Pep440:           pep440Version,
+			Pep440WithPrefix: pep440WithPrefix,
+			Major:            parsedVersion.Major,
+			Minor:            parsedVersion.Minor,
+			Patch:            parsedVersion.Patch,
+			IsRelease:        isRelease,
+		}
+
+		jsonBytes, err := json.Marshal(output)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal JSON output: %w", err)
+		}
+
+		log("Generated JSON output with semver=%s, semverWithPrefix=%s, pep440=%s, pep440WithPrefix=%s, major=%d, minor=%d, patch=%d, isRelease=%v",
+			version, semverWithPrefix, pep440Version, pep440WithPrefix, parsedVersion.Major, parsedVersion.Minor, parsedVersion.Patch, isRelease)
+		return string(jsonBytes), nil
 	case defaults.ModePep440:
 		pep440Version, err := ConvertToPEP440(version)
 		if err != nil {
