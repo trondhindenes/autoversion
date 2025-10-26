@@ -38,8 +38,8 @@ jobs:
     name: Get Version
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.get_version.outputs.version }}
-      is-prerelease: ${{ steps.get_version.outputs.is-prerelease }}
+      version: ${{ steps.get_version.outputs.semverWithPrefix }}
+      is-release: ${{ steps.get_version.outputs.isRelease }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -153,7 +153,7 @@ jobs:
     needs: 
       - build
       - get-version
-    if: needs.get-version.outputs.is-prerelease == 'false'
+    if: needs.get-version.outputs.is-release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -244,7 +244,7 @@ jobs:
             type=semver,pattern={{version}},value=${{ needs.get-version.outputs.version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.get-version.outputs.version }}
             type=semver,pattern={{major}},value=${{ needs.get-version.outputs.version }}
-            type=raw,value=latest,enable=${{ needs.get-version.outputs.is-prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ needs.get-version.outputs.is-release == 'true' }}
 
       - name: Copy Dockerfile to context
         run: cp Dockerfile docker-context/
@@ -266,10 +266,10 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}-action,value=${{ needs.get-version.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}}-action,value=${{ needs.get-version.outputs.version }}
-            type=semver,pattern={{major}}-action,value=${{ needs.get-version.outputs.version }}
-            type=raw,value=latest-action,enable=${{ needs.get-version.outputs.is-prerelease == 'false' }}
+            type=semver,pattern={{version}},value=${{ needs.get-version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.get-version.outputs.version }}
+            type=semver,pattern={{major}},value=${{ needs.get-version.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.get-version.outputs.is-release == 'true' }}
 
       - name: Copy entrypoint script to context
         run: cp entrypoint.sh docker-context/
