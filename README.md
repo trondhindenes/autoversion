@@ -4,19 +4,19 @@ A Go-based CLI tool that automatically generates semantic versions based on the 
 
 ## Features
 - Generates unique semantic versions based on git commit history
-- Pure semver output by default (e.g., `1.0.0`, but can be prefixed to for example `v1.0.0`)
+- Pure semver output by default (e.g., `1.0.0`, but can be configured to add prefix, for example `v1.0.0`)
 - Git tag support: tags on commits take precedence over calculated versions
 - Configurable tag prefix stripping (e.g., `v2.0.0` → `2.0.0` or `PRODUCT/2.0.0` → `2.0.0`)
-- Configurable version prefix for output (e.g., add `v` to output `v1.0.0`)
 - Automatic main branch detection: Works with both `main` and `master` branches by default, can be configured
 - Flexible main branch behavior:
-  - `release` mode (default): Main branch creates release versions like `1.0.0`, `1.0.1`, `1.0.2`
+  - `release` mode (default): Untagged main branch creates release versions like `1.0.0`, `1.0.1`, `1.0.2`, tags are optional
   - `pre` mode: Main branch creates prerelease versions like `1.0.0-pre.0`, `1.0.0-pre.1` (only tagged commits create releases)
 - Feature branch prerelease versions: `1.0.2-feature.0`, `1.0.2-feature.1`, etc.
 - CI/CD environment support with branch detection
 - Supports both YAML and JSON configuration files
 - JSON schema generation for configuration validation
 - Zero configuration required - works with sensible defaults
+- Pep440-compatible output option for python projects
 
 ## Requirements
 
@@ -65,10 +65,8 @@ docker run --rm -v "$(pwd):/repo" ghcr.io/trondhindenes/autoversion:latest --con
 # Generate schema
 docker run --rm ghcr.io/trondhindenes/autoversion:latest schema
 ```
-
-**Available tags:**
-- `latest` - Latest stable release
-- `v1.0.47` - Specific versions with semver precision
+See https://github.com/trondhindenes/autoversion/pkgs/container/autoversion for available tags. 
+The tag `latest` points to the newest release version and should be safe to use.
 
 ### Download Pre-built Binaries
 
