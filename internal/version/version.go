@@ -187,7 +187,7 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 
 	// Check for most recent tag in history
 	log("Looking for most recent tag in commit history...")
-	mostRecentTag, commitsSinceTag, err := repo.GetMostRecentTag()
+	mostRecentTag, commitsSinceTag, err := repo.GetMostRecentTag(tagPrefix)
 	if err != nil {
 		return "", fmt.Errorf("failed to get most recent tag: %w", err)
 	}
@@ -214,14 +214,9 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 	var useTagAsBase bool
 	var tagNotInBranchHistory bool
 	if mostRecentTag != "" {
-		// commitsSinceTag can be -1 if the tag is not in current branch's history
-		if commitsSinceTag == -1 {
-			log("Found most recent tag in repository: %s (not in current branch history)", mostRecentTag)
-			tagNotInBranchHistory = true
-		} else {
-			log("Found most recent tag in history: %s (%d commits ago)", mostRecentTag, commitsSinceTag)
-			tagNotInBranchHistory = false
-		}
+		// GetMostRecentTag now only returns tags in the current branch's history
+		log("Found most recent tag in history: %s (%d commits ago)", mostRecentTag, commitsSinceTag)
+		tagNotInBranchHistory = false
 
 		// Strip prefix and validate
 		strippedTag := git.StripTagPrefix(mostRecentTag, tagPrefix)
@@ -248,12 +243,6 @@ func CalculateWithConfig(cfg *config.Config) (string, error) {
 				log("Using tag '%s' as base version", strippedTag)
 				baseVersion = parsedVersion
 				useTagAsBase = true
-				// If tag is not in current branch's history, treat it as if we're 0 commits away
-				// This allows feature branches to use the latest tag from main as their base
-				if commitsSinceTag == -1 {
-					commitsSinceTag = 0
-					log("Tag is not in current branch history, using as base with 0 commits distance")
-				}
 			}
 		}
 	} else {

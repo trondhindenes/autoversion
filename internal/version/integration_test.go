@@ -28,6 +28,9 @@ func TestIntegration(t *testing.T) {
 	t.Run("CustomInitialVersion", testCustomInitialVersion)
 	t.Run("MasterBranchSupport", testMasterBranchSupport)
 	t.Run("MainBranchBehaviorPre", testMainBranchBehaviorPre)
+	t.Run("UntaggedVersionWithEarlierTag", testUntaggedVersionWithEarlierTag)
+	t.Run("TagPrefixFiltering", testTagPrefixFiltering)
+	t.Run("MainBranchBehaviorPreWithTagNotInHistory", testMainBranchBehaviorPreWithTagNotInHistory)
 }
 
 func testMainBranchVersioning(t *testing.T) {
@@ -712,6 +715,7 @@ func setupTestRepo(t *testing.T, mainBranch string) string {
 	runGit(t, tmpDir, "init", "-b", mainBranch)
 	runGit(t, tmpDir, "config", "user.email", "test@example.com")
 	runGit(t, tmpDir, "config", "user.name", "Test User")
+	runGit(t, tmpDir, "config", "commit.gpgsign", "false")
 
 	// Create initial commit
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -794,6 +798,191 @@ func calculateVersionInRepo(repoPath, mainBranch, tagPrefix string) (string, err
 		Mode:       &mode,
 	}
 	return CalculateWithConfig(cfg)
+}
+
+func testUntaggedVersionWithEarlierTag(t *testing.T) {
+	repo := setupTestRepo(t, "main")
+	defer cleanup(repo)
+
+	// Add a couple of commits
+	makeCommit(t, repo, "second commit")
+	makeCommit(t, repo, "third commit")
+
+	// Tag the current commit as 4.0.0
+	createTag(t, repo, "4.0.0")
+
+	// Verify we're at 4.0.0
+	version, err := calculateVersionInRepo(repo, "main", "")
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "4.0.0" {
+		t.Errorf("Expected 4.0.0 (tagged), got %s", version)
+	}
+
+	// Add several more commits AFTER the tag
+	makeCommit(t, repo, "fourth commit")
+	makeCommit(t, repo, "fifth commit")
+	makeCommit(t, repo, "sixth commit")
+
+	// The calculated version should be higher than 4.0.0
+	// Since we have 3 commits after the 4.0.0 tag, we expect 4.0.3
+	version, err = calculateVersionInRepo(repo, "main", "")
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "4.0.3" {
+		t.Errorf("Expected 4.0.3 (incremented from tag 4.0.0 + 3 commits), got %s", version)
+	}
+
+	// Add one more commit to verify it continues incrementing
+	makeCommit(t, repo, "seventh commit")
+	version, err = calculateVersionInRepo(repo, "main", "")
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "4.0.4" {
+		t.Errorf("Expected 4.0.4 (incremented from tag 4.0.0 + 4 commits), got %s", version)
+	}
+}
+
+func testTagPrefixFiltering(t *testing.T) {
+	repo := setupTestRepo(t, "main")
+	defer cleanup(repo)
+
+	// Add a couple of commits
+	makeCommit(t, repo, "second commit")
+	makeCommit(t, repo, "third commit")
+
+	// Tag the current commit with INCLUDE/4.0.0
+	createTag(t, repo, "INCLUDE/4.0.0")
+
+	// Verify with tagPrefix="INCLUDE/" we get 4.0.0
+	version, err := calculateVersionInRepo(repo, "main", "INCLUDE/")
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "4.0.0" {
+		t.Errorf("Expected 4.0.0 (INCLUDE/ tag stripped), got %s", version)
+	}
+
+	// Add a few more commits
+	makeCommit(t, repo, "fourth commit")
+	makeCommit(t, repo, "fifth commit")
+	makeCommit(t, repo, "sixth commit")
+
+	// Tag this commit with IGNORE/3.0.0 (newer commit but older version)
+	createTag(t, repo, "IGNORE/3.0.0")
+
+	// Add a few more commits after the IGNORE tag
+	makeCommit(t, repo, "seventh commit")
+	makeCommit(t, repo, "eighth commit")
+
+	// With tagPrefix="INCLUDE/", it should ignore the IGNORE/3.0.0 tag
+	// and calculate based on INCLUDE/4.0.0 which is 5 commits ago
+	// Expected: 4.0.5
+	version, err = calculateVersionInRepo(repo, "main", "INCLUDE/")
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "4.0.5" {
+		t.Errorf("Expected 4.0.5 (INCLUDE/4.0.0 + 5 commits, IGNORE tag ignored), got %s", version)
+	}
+
+	// Verify that without prefix filtering, the IGNORE/3.0.0 tag is also invalid
+	// (since it has a prefix), so it should still use the initial version calculation
+	versionNoPrefix, err := calculateVersionInRepo(repo, "main", "")
+	if err != nil {
+		t.Fatalf("Failed to calculate version without prefix: %v", err)
+	}
+	// Without any valid tags (both have prefixes), should be based on commit count: 1.0.7
+	if versionNoPrefix != "1.0.7" {
+		t.Errorf("Expected 1.0.7 (no valid tags without prefix), got %s", versionNoPrefix)
+	}
+}
+
+func testMainBranchBehaviorPreWithTagNotInHistory(t *testing.T) {
+	repo := setupTestRepo(t, "main")
+	defer cleanup(repo)
+
+	// Change to repo directory
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	if err := os.Chdir(repo); err != nil {
+		t.Fatalf("Failed to change to repo directory: %v", err)
+	}
+	defer os.Chdir(oldDir)
+
+	// Create a scenario where a tag exists but is NOT in current branch history:
+	// 1. Create a few commits on main and tag it
+	makeCommit(t, repo, "second commit")
+	makeCommit(t, repo, "third commit")
+	createTag(t, repo, "GRID/4.106.0") // Tag on main
+
+	// 2. Create a feature branch and add commits
+	checkoutBranch(t, repo, "feature/branch-a", true)
+	makeCommit(t, repo, "feature commit 1")
+	makeCommit(t, repo, "feature commit 2")
+
+	// 3. Tag the feature branch (this tag will NOT be in main's history)
+	createTag(t, repo, "GRID/4.106.8")
+
+	// 4. Switch back to main and add more commits
+	checkoutBranch(t, repo, "main", false)
+	makeCommit(t, repo, "main commit 1")
+	makeCommit(t, repo, "main commit 2")
+
+	// Now we're on main with:
+	// - GRID/4.106.0 in main's history (3 commits ago)
+	// - GRID/4.106.8 NOT in main's history (on feature/branch-a)
+	// - 2 commits since GRID/4.106.0
+
+	// Test with mainBranchBehavior: pre and tagPrefix: GRID/
+	preBehavior := "pre"
+	mode := "semver"
+	tagPrefix := "GRID/"
+	cfg := &config.Config{
+		MainBranchBehavior: &preBehavior,
+		Mode:               &mode,
+		TagPrefix:          &tagPrefix,
+	}
+
+	// GetMostRecentTag now only returns tags in current branch history
+	// So it should find GRID/4.106.0 and calculate version from there
+	// Expected: 4.106.2-pre.1 (base 4.106.0 + 2 commits, prerelease format)
+	version, err := CalculateWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+
+	// The version should be a prerelease (contain "-pre.")
+	if !strings.Contains(version, "-pre.") {
+		t.Errorf("Expected prerelease version (containing '-pre.') with mainBranchBehavior=pre, got %s", version)
+	}
+
+	// Should be based on GRID/4.106.0 (the tag in main's history), not 4.106.8
+	if !strings.HasPrefix(version, "4.106.2-pre.") {
+		t.Errorf("Expected version starting with '4.106.2-pre.' (2 commits since GRID/4.106.0), got %s", version)
+	}
+
+	// Also test without the pre behavior to ensure it works normally
+	releaseBehavior := "release"
+	cfg2 := &config.Config{
+		MainBranchBehavior: &releaseBehavior,
+		Mode:               &mode,
+		TagPrefix:          &tagPrefix,
+	}
+	version2, err := CalculateWithConfig(cfg2)
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+
+	// With release behavior, we expect a release version 4.106.2
+	if version2 != "4.106.2" {
+		t.Errorf("Expected '4.106.2' with mainBranchBehavior=release, got %s", version2)
+	}
 }
 
 func boolPtr(b bool) *bool {

@@ -123,13 +123,14 @@ Autoversion's output defaults to "json" mode, which will output a JSON object wi
       "semver": "3.0.4",
       "semverWithPrefix": "v3.0.4",
       "pep440": "3.0.4",
-      "pep440WithPrefix": "v3.0.4",
+      "pep440WithPrefix": "v3.0.4",  
       "major": 3,
       "minor": 0,
       "patch": 4,
       "isRelease": true
   }
 ```
+Note that `semverWithPrefix` may contain a value that is not semver-compliant, and `pep440WithPrefix` may contain a value that is not pep440-compliant. This will happen if the `versionPrefix` setting is configured.
 You can also set it to "semver" or "pep440" mode to get a pure semver or PEP 440 version respectively. In these modes, the `versionPrefix` is added to the calculated version.
 
 
@@ -220,11 +221,12 @@ When the current commit has a git tag:
 
 ### Main Branch Versioning
 
-When running on the main branch (or configured primary branch) without a tag:
+When running on the main branch (or configured primary branch) without a tag, and `mainBranchBehavior` has not been changed from the default:
 - Version format: `MAJOR.MINOR.PATCH`
-- Always starts at `1.0.0`
+- Always starts at the configured `initialVersion` (which defaults to `1.0.0`)
 - Each commit increments the PATCH version
 - Example progression: `1.0.0` → `1.0.1` → `1.0.2`
+- If `mainBranchBehavior` is set to `"pre"`, the version is a prerelease version (e.g., `1.0.0-pre.0`, `1.0.0-pre.1`, etc.)
 
 ### Feature Branch Versioning
 
