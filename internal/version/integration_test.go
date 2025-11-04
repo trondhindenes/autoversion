@@ -31,6 +31,7 @@ func TestIntegration(t *testing.T) {
 	t.Run("UntaggedVersionWithEarlierTag", testUntaggedVersionWithEarlierTag)
 	t.Run("TagPrefixFiltering", testTagPrefixFiltering)
 	t.Run("MainBranchBehaviorPreWithTagNotInHistory", testMainBranchBehaviorPreWithTagNotInHistory)
+	t.Run("MultipleTagsHighestVersion", testMultipleTagsHighestVersion)
 }
 
 func testMainBranchVersioning(t *testing.T) {
@@ -982,6 +983,49 @@ func testMainBranchBehaviorPreWithTagNotInHistory(t *testing.T) {
 	// With release behavior, we expect a release version 4.106.2
 	if version2 != "4.106.2" {
 		t.Errorf("Expected '4.106.2' with mainBranchBehavior=release, got %s", version2)
+	}
+}
+
+func testMultipleTagsHighestVersion(t *testing.T) {
+	repo := setupTestRepo(t, "main")
+	defer cleanup(repo)
+
+	// Add some commits to build up history
+	makeCommit(t, repo, "second commit")
+	makeCommit(t, repo, "third commit")
+	makeCommit(t, repo, "fourth commit")
+
+	// Create multiple tags on different commits
+	// Tag the current commit with 1.0.21
+	createTag(t, repo, "1.0.21")
+
+	// Add another commit and tag with 1.0.22
+	makeCommit(t, repo, "fifth commit")
+	createTag(t, repo, "1.0.22")
+
+	// Add another commit and tag with 1.3.1 (highest version)
+	makeCommit(t, repo, "sixth commit")
+	createTag(t, repo, "1.3.1")
+
+	// Verify that we get 1.3.1 (the highest semantic version)
+	version, err := calculateVersionInRepo(repo, "main", "")
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.3.1" {
+		t.Errorf("Expected 1.3.1 (highest version among 1.0.21, 1.0.22, 1.3.1), got %s", version)
+	}
+
+	// Add a commit after the highest tag
+	makeCommit(t, repo, "seventh commit")
+
+	// Version should increment from 1.3.1 to 1.3.2
+	version, err = calculateVersionInRepo(repo, "main", "")
+	if err != nil {
+		t.Fatalf("Failed to calculate version: %v", err)
+	}
+	if version != "1.3.2" {
+		t.Errorf("Expected 1.3.2 (incremented from 1.3.1), got %s", version)
 	}
 }
 

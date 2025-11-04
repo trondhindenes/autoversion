@@ -47,6 +47,18 @@ func (v Version) String() string {
 	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
 }
 
+// IsGreaterThan returns true if v is greater than other according to semver precedence
+// Compares only Major.Minor.Patch, ignoring prerelease and build metadata
+func (v Version) IsGreaterThan(other Version) bool {
+	if v.Major != other.Major {
+		return v.Major > other.Major
+	}
+	if v.Minor != other.Minor {
+		return v.Minor > other.Minor
+	}
+	return v.Patch > other.Patch
+}
+
 // Calculate calculates the version based on the current git state
 func Calculate(mainBranch, tagPrefix string) (string, error) {
 	cfg := &config.Config{

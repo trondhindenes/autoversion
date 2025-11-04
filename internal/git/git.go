@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
@@ -513,6 +514,7 @@ func (g *Repo) CheckMainBranchHasNewCommitsSinceBranchPoint(mainBranch, currentB
 }
 
 // GetTagOnCurrentCommit returns the tag on the current HEAD commit, if any
+// When multiple tags point to the same commit, it returns the one with the highest semantic version
 func (g *Repo) GetTagOnCurrentCommit() (string, error) {
 	head, err := g.repo.Head()
 	if err != nil {
@@ -527,31 +529,64 @@ func (g *Repo) GetTagOnCurrentCommit() (string, error) {
 		return "", fmt.Errorf("failed to get tags: %w", err)
 	}
 
-	var foundTag string
+	var foundTags []string
 	err = tagRefs.ForEach(func(ref *plumbing.Reference) error {
 		// Check if this tag points to the current commit
 		if ref.Hash() == headHash {
-			foundTag = ref.Name().Short()
-			return storer.ErrStop
+			foundTags = append(foundTags, ref.Name().Short())
 		}
 
 		// Check if it's an annotated tag
 		tag, err := g.repo.TagObject(ref.Hash())
 		if err == nil {
 			if tag.Target == headHash {
-				foundTag = ref.Name().Short()
-				return storer.ErrStop
+				foundTags = append(foundTags, ref.Name().Short())
 			}
 		}
 
 		return nil
 	})
 
-	if err != nil && err != storer.ErrStop {
+	if err != nil {
 		return "", fmt.Errorf("failed to iterate tags: %w", err)
 	}
 
-	return foundTag, nil
+	if len(foundTags) == 0 {
+		return "", nil
+	}
+
+	// If multiple tags point to the same commit, select the one with the highest semantic version
+	if len(foundTags) > 1 {
+		return selectHighestSemverTag(foundTags), nil
+	}
+
+	return foundTags[0], nil
+}
+
+// selectHighestSemverTag selects the tag with the highest semantic version from a list of tags
+func selectHighestSemverTag(tags []string) string {
+	if len(tags) == 0 {
+		return ""
+	}
+
+	highestTag := tags[0]
+	highestVersion, hasValidVersion := parseSemverSimple(highestTag)
+
+	for i := 1; i < len(tags); i++ {
+		version, ok := parseSemverSimple(tags[i])
+		if !ok {
+			// Skip tags that can't be parsed as semver
+			continue
+		}
+
+		if !hasValidVersion || version.isGreaterThan(highestVersion) {
+			highestVersion = version
+			highestTag = tags[i]
+			hasValidVersion = true
+		}
+	}
+
+	return highestTag
 }
 
 // IsTagInHistory checks if a tag is reachable from HEAD (i.e., merged into current branch)
@@ -605,10 +640,69 @@ func (g *Repo) IsTagInHistory(tagName string) (bool, error) {
 	return found, nil
 }
 
+// semverVersion is a simplified version struct for comparing semantic versions
+type semverVersion struct {
+	Major int
+	Minor int
+	Patch int
+}
+
+// parseSemverSimple parses a semver string (after prefix stripping) into components
+// Returns major, minor, patch and whether the parsing was successful
+func parseSemverSimple(semver string) (semverVersion, bool) {
+	var v semverVersion
+
+	// Remove prerelease and build metadata for parsing
+	parts := strings.Split(semver, "-")
+	corePart := parts[0]
+
+	parts = strings.Split(corePart, "+")
+	corePart = parts[0]
+
+	// Parse MAJOR.MINOR.PATCH
+	parts = strings.Split(corePart, ".")
+	if len(parts) != 3 {
+		return v, false
+	}
+
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return v, false
+	}
+
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return v, false
+	}
+
+	patch, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return v, false
+	}
+
+	v.Major = major
+	v.Minor = minor
+	v.Patch = patch
+
+	return v, true
+}
+
+// isGreaterThan returns true if v is greater than other according to semver precedence
+func (v semverVersion) isGreaterThan(other semverVersion) bool {
+	if v.Major != other.Major {
+		return v.Major > other.Major
+	}
+	if v.Minor != other.Minor {
+		return v.Minor > other.Minor
+	}
+	return v.Patch > other.Patch
+}
+
 // GetMostRecentTag returns the most recent tag that is reachable from HEAD
 // Only tags that are in the current branch's history (merged) are considered
 // If tagPrefix is provided, only tags with that prefix are considered
 // Returns the tag name and commits since that tag (0 if we're on the tag)
+// The "most recent" tag is determined by highest semantic version, not by commit date
 func (g *Repo) GetMostRecentTag(tagPrefix string) (string, int, error) {
 	head, err := g.repo.Head()
 	if err != nil {
@@ -699,11 +793,31 @@ func (g *Repo) GetMostRecentTag(tagPrefix string) (string, int, error) {
 		return "", 0, nil
 	}
 
-	// Find the most recent tag by commit date among reachable tags
+	// Find the tag with the highest semantic version among reachable tags
 	var mostRecentTag *tagInfo
+	var highestVersion semverVersion
+	hasValidVersion := false
+
 	for i := range reachableTags {
-		if mostRecentTag == nil || reachableTags[i].commit.Committer.When.After(mostRecentTag.commit.Committer.When) {
+		// Strip prefix for version comparison
+		versionStr := StripTagPrefix(reachableTags[i].name, tagPrefix)
+
+		// Try to parse as semver
+		version, ok := parseSemverSimple(versionStr)
+		if !ok {
+			// If we can't parse as semver, skip this tag for version comparison
+			// but keep it as a fallback if no valid semver tags exist
+			if mostRecentTag == nil {
+				mostRecentTag = &reachableTags[i]
+			}
+			continue
+		}
+
+		// Compare versions
+		if !hasValidVersion || version.isGreaterThan(highestVersion) {
+			highestVersion = version
 			mostRecentTag = &reachableTags[i]
+			hasValidVersion = true
 		}
 	}
 
