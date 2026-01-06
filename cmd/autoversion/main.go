@@ -1,15 +1,18 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/trondhindenes/autoversion/internal/config"
 	"github.com/trondhindenes/autoversion/internal/defaults"
+	"github.com/trondhindenes/autoversion/internal/ghactions"
 	"github.com/trondhindenes/autoversion/internal/version"
 )
 
@@ -18,7 +21,16 @@ var (
 	Version    = "0.0.1-dev"
 	cfgFile    string
 	configFlag []string
-	rootCmd    = &cobra.Command{
+
+	// gh-versions command flags
+	ghWorkflow  string
+	ghJob       string
+	ghStep      string
+	ghLimit     int
+	ghOutputFmt string
+	ghVerbose   bool
+
+	rootCmd = &cobra.Command{
 		Use:   "autoversion",
 		Short: "Automatically generate semantic versions based on git repository state",
 		Long: `autoversion is a CLI tool that generates semantic versions based on the state of a git repository.
@@ -37,6 +49,33 @@ It calculates versions for the main branch (e.g., 1.0.0, 1.0.1) and prerelease v
 			fmt.Println(Version)
 		},
 	}
+	ghVersionsCmd = &cobra.Command{
+		Use:   "gh-versions",
+		Short: "Get calculated versions from GitHub Actions workflow runs",
+		Long: `Fetches version information from recent GitHub Actions workflow runs.
+
+This command uses the gh CLI to list recent workflow runs and extract the
+calculated version from the "Final version:" log output.
+
+Requires:
+  - gh CLI installed and authenticated
+  - A workflow that outputs version info in the format:
+    Final version: {"semver":"1.0.0",...}
+
+Examples:
+  # Get versions from all workflows
+  autoversion gh-versions
+
+  # Get versions from a specific workflow
+  autoversion gh-versions -w "CI"
+
+  # Get versions from a specific workflow and job
+  autoversion gh-versions -w "CI" -j "build"
+
+  # Limit results
+  autoversion gh-versions -w "CI" -L 5`,
+		Run: runGhVersions,
+	}
 )
 
 func init() {
@@ -45,6 +84,15 @@ func init() {
 	rootCmd.PersistentFlags().StringArrayVar(&configFlag, "config-flag", []string{}, "override config setting (format: key=value, can be used multiple times)")
 	rootCmd.AddCommand(schemaCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(ghVersionsCmd)
+
+	// gh-versions command flags
+	ghVersionsCmd.Flags().StringVarP(&ghWorkflow, "workflow", "w", "", "workflow name or filename (e.g., 'CI' or 'ci.yml')")
+	ghVersionsCmd.Flags().StringVarP(&ghJob, "job", "j", "", "job name to filter logs (e.g., 'build')")
+	ghVersionsCmd.Flags().StringVarP(&ghStep, "step", "s", "calculate version", "step name containing version output")
+	ghVersionsCmd.Flags().IntVarP(&ghLimit, "limit", "L", 5, "maximum number of runs to fetch")
+	ghVersionsCmd.Flags().StringVarP(&ghOutputFmt, "output", "o", "table", "output format: table, json")
+	ghVersionsCmd.Flags().BoolVarP(&ghVerbose, "verbose", "v", false, "print verbose progress information")
 }
 
 func initConfig() {
@@ -187,6 +235,37 @@ func runSchema(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	fmt.Println(schema)
+}
+
+func runGhVersions(cmd *cobra.Command, args []string) {
+	versions, err := ghactions.GetVersionsFromRuns(ghWorkflow, ghJob, ghStep, ghLimit, ghVerbose)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(versions) == 0 {
+		fmt.Fprintln(os.Stderr, "No versions found in workflow runs")
+		os.Exit(0)
+	}
+
+	switch ghOutputFmt {
+	case "json":
+		output, err := json.MarshalIndent(versions, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(string(output))
+	default:
+		// Table format
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "BRANCH\tCOMMIT\tVERSION\tWORKFLOW\tJOB\tSTATUS\tRUN")
+		for _, v := range versions {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t#%d\n", v.Branch, v.CommitSHA, v.Version, v.Workflow, v.Job, v.Conclusion, v.RunNumber)
+		}
+		w.Flush()
+	}
 }
 
 func main() {

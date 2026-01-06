@@ -17,6 +17,7 @@ A Go-based CLI tool that automatically generates semantic versions based on the 
 - JSON schema generation for configuration validation
 - Zero configuration required - works with sensible defaults
 - Pep440-compatible output option for python projects
+- `gh-versions` command to view calculated versions from GitHub Actions runs
 
 ## Requirements
 
@@ -192,6 +193,74 @@ autoversion schema
 ```
 
 This outputs a JSON schema that can be used for IDE autocompletion and validation.
+
+### View Versions from GitHub Actions Runs
+
+The `gh-versions` command fetches calculated versions from recent GitHub Actions workflow runs. This is useful for seeing what versions were calculated for different branches and commits across your CI/CD runs.
+
+**Requirements:**
+- [GitHub CLI (`gh`)](https://cli.github.com/) installed and authenticated
+- A workflow that uses autoversion and outputs version info in JSON format
+
+**Basic Usage:**
+```bash
+# Get versions from all workflows (last 5 runs by default)
+autoversion gh-versions
+
+# Get versions from a specific workflow
+autoversion gh-versions -w "CI"
+
+# Filter by job name for more accurate results
+autoversion gh-versions -w "CI" -j "Get Version"
+
+# Limit number of runs
+autoversion gh-versions -L 10
+
+# Output as JSON
+autoversion gh-versions -o json
+
+# Verbose mode to see progress
+autoversion gh-versions -v
+```
+
+**Example Output:**
+```
+BRANCH  COMMIT   VERSION  WORKFLOW  JOB          STATUS   RUN
+main    e6b6405  v1.0.55  CI        Get Version  success  #41
+main    8a12f6c  v1.0.54  CI        Get Version  success  #40
+main    45073a8  v1.0.53  CI        Get Version  success  #39
+```
+
+**Available Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--workflow` | `-w` | Workflow name or filename | (all workflows) |
+| `--job` | `-j` | Job name to filter logs | (all jobs) |
+| `--limit` | `-L` | Maximum number of runs to fetch | 5 |
+| `--output` | `-o` | Output format: `table` or `json` | `table` |
+| `--verbose` | `-v` | Print verbose progress information | `false` |
+
+**JSON Output:**
+
+When using `-o json`, the output includes additional fields:
+```json
+[
+  {
+    "branch": "main",
+    "commitSha": "e6b6405",
+    "version": "v1.0.55",
+    "workflow": "CI",
+    "job": "Get Version",
+    "step": "UNKNOWN STEP",
+    "runUrl": "https://github.com/owner/repo/actions/runs/123456",
+    "runNumber": 41,
+    "conclusion": "success"
+  }
+]
+```
+
+**Note:** The command parses the "Final version:" JSON output line from workflow logs, which autoversion outputs in JSON mode during CI runs.
 
 ## How It Works
 
